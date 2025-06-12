@@ -10,7 +10,7 @@ EXTRA_FLAGS=-X 'main.version=${VERSION}' \
 			-X 'main.gitVersion=`git rev-parse --short HEAD`' \
 			-X 'main.buildTime=`date '+%Y-%m-%d %H:%M:%S'`'
 
-BINARY=${NAME}.so
+BINARY=${NAME}.plugin
 
 default:
 	@go build -buildmode=plugin -ldflags "${EXTRA_FLAGS}" -o ../${BINARY}

@@ -5,6 +5,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -27,6 +28,10 @@ var (
 	cmdCancel context.CancelFunc
 
 	reporterDir string
+)
+
+var (
+	errInvalidArgs = errors.New("invalid args")
 )
 
 // rootCmd represents the base command when called without any subcommands
