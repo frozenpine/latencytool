@@ -5,10 +5,10 @@ BUILD=`date +%FT%T%z`
 PACKAGES=`go list ./... | grep -v /vendor/`
 VETPACKAGES=`go list ./... | grep -v /vendor/ | grep -v /examples/`
 GOFILES=`find . -name "*.go" -type f -not -path "./vendor/*"`
-EXTRA_FLAGS=-X 'github.com/frozenpine/latency4go/cli/cmd.version=${VERSION}' \
-			-X 'github.com/frozenpine/latency4go/cli/cmd.goVersion=`go version|cut -d ' ' -f3`' \
-			-X 'github.com/frozenpine/latency4go/cli/cmd.gitVersion=`git rev-parse --short HEAD`' \
-			-X 'github.com/frozenpine/latency4go/cli/cmd.buildTime=`date '+%Y-%m-%d %H:%M:%S'`'
+EXTRA_FLAGS=-X 'github.com/frozenpine/latency4go/cli/latencytool/cmd.version=${VERSION}' \
+			-X 'github.com/frozenpine/latency4go/cli/latencytool/cmd.goVersion=`go version|cut -d ' ' -f3`' \
+			-X 'github.com/frozenpine/latency4go/cli/latencytool/cmd.gitVersion=`git rev-parse --short HEAD`' \
+			-X 'github.com/frozenpine/latency4go/cli/latencytool/cmd.buildTime=`date '+%Y-%m-%d %H:%M:%S'`'
 
 ifeq ($(OS), Windows_NT)
 	BINARY=${NAME}.exe
