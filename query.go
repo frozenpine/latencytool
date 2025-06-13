@@ -210,7 +210,7 @@ var (
 	errInvalidTimeRangeArg = errors.New("invalid time range arg")
 )
 
-const TIMERANGE_KW_SPLIT = ";"
+const TIMERANGE_KW_SPLIT = ","
 const (
 	TimeBefore     timeRangeKey = "before"
 	TimeFrom       timeRangeKey = "from"

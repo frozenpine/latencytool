@@ -14,12 +14,8 @@ import (
 var watchCmd = &cobra.Command{
 	Use:   "watch",
 	Short: "Monitoring exchange's fronts latency",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Long: `Just watching exchange's fronts latency results 
+with extra specified args`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		interval, _ := cmd.Flags().GetDuration("interval")
 		once, _ := cmd.Flags().GetBool("once")
@@ -43,7 +39,7 @@ func init() {
 	rootCmd.AddCommand(watchCmd)
 
 	watchCmd.Flags().Duration(
-		"interval", time.Minute, "Override default interval arg",
+		"interval", time.Minute, "Override global interval arg",
 	)
 	watchCmd.Flags().IntVar(
 		&config.DataSize, "data", 0, "Specify return data size",
