@@ -31,6 +31,9 @@ var (
 	cmdCancel context.CancelFunc
 
 	client atomic.Pointer[latency4go.LatencyClient]
+	config latency4go.QueryConfig = latency4go.QueryConfig{
+		TimeRange: latency4go.TimeRange{From: "1m", To: "now"},
+	}
 )
 
 var (
@@ -66,8 +69,7 @@ and report to trading systems`,
 		ins := latency4go.LatencyClient{}
 
 		if err := ins.Init(
-			cmdCtx, schema, host, port, sink,
-			&latency4go.QueryConfig{},
+			cmdCtx, schema, host, port, sink, &config,
 		); err != nil {
 			return errors.Join(err, errInvalidArgs, errInvalidInstance)
 		}
@@ -168,21 +170,52 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(
 		&logFile, "log", "", "Log file path")
 	rootCmd.PersistentFlags().IntVar(
-		&logSize, "size", 500, "Log rotate size in MB")
+		&logSize, "size", 300, "Log rotate size in MB")
 	rootCmd.PersistentFlags().IntVar(
 		&logKeep, "keep", 5, "Log archive keep count")
 
 	rootCmd.PersistentFlags().String(
-		"schema", "http", "",
+		"schema", "http", "Latency system's request schema",
 	)
 	rootCmd.PersistentFlags().String(
-		"host", "10.36.51.124", "",
+		"host", "10.36.51.124", "Latency system's request host",
 	)
 	rootCmd.PersistentFlags().Int(
-		"port", 9200, "",
+		"port", 9200, "Latency system's request port",
 	)
 	rootCmd.PersistentFlags().Duration(
-		"interval", 0, "",
+		"interval", 0, "Run periodically interver, 0 for onetime running",
+	)
+
+	rootCmd.PersistentFlags().Var(
+		&config.TimeRange, "before", "Lantency",
+	)
+	rootCmd.PersistentFlags().IntVar(
+		&config.Tick2Order.From, "from", 0,
+		"Tick2Order range left bound in PicoSec",
+	)
+	rootCmd.PersistentFlags().IntVar(
+		&config.Tick2Order.To, "to", 100000000,
+		"Tick2Order range right bound in PicoSec",
+	)
+	rootCmd.PersistentFlags().Float64SliceVar(
+		(*[]float64)(&config.Quantile), "percents",
+		[]float64{10, 25, 50, 75, 90},
+		"Latency aggregation quantile percents",
+	)
+	rootCmd.PersistentFlags().IntVar(
+		&config.AggSize, "agg", 15, "Aggregation results size",
+	)
+	rootCmd.PersistentFlags().IntVar(
+		&config.AggCount, "least", 5, "At least doc count for aggregation",
+	)
+	rootCmd.PersistentFlags().StringSliceVar(
+		(*[]string)(&config.Users), "user", nil,
+		"ClientID filter for aggregation",
+	)
+	rootCmd.PersistentFlags().StringVar(
+		&config.SortBy, "sort", "",
+		"Sort exchange's fronts by elastic painless",
 	)
 
 	for _, cmd := range rootCmd.Commands() {

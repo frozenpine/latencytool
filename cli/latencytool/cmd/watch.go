@@ -4,13 +4,15 @@ Copyright © 2025 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"time"
+
 	"github.com/spf13/cobra"
 )
 
 // watchCmd represents the watch command
 var watchCmd = &cobra.Command{
 	Use:   "watch",
-	Short: "A brief description of your command",
+	Short: "Monitoring exchange's fronts latency",
 	Long: `A longer description that spans multiple lines and likely contains examples
 and usage of using your command. For example:
 
@@ -19,6 +21,10 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		interval, _ := cmd.Flags().GetDuration("interval")
+		once, _ := cmd.Flags().GetBool("once")
+		if once {
+			interval = 0
+		}
 
 		if ins := client.Load(); ins != nil {
 			if err := ins.Start(interval); err != nil {
@@ -35,13 +41,10 @@ to quickly create a Cobra application.`,
 func init() {
 	rootCmd.AddCommand(watchCmd)
 
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// watchCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// watchCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	watchCmd.Flags().Duration(
+		"interval", time.Minute, "Override default interval arg",
+	)
+	watchCmd.Flags().Bool(
+		"once", false, "Run watcher once, conflict & override interval",
+	)
 }

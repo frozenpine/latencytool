@@ -46,6 +46,7 @@ type LatencyClient struct {
 	client atomic.Pointer[elastic.Client]
 
 	startOnce   sync.Once
+	stopOnce    sync.Once
 	runCtx      context.Context
 	runCancel   context.CancelFunc
 	watchRun    chan error
@@ -91,13 +92,27 @@ func (c *LatencyClient) Init(
 			slog.NewLogLogger(
 				esLogHandler, slog.LevelDebug-1)))
 
-		var client *elastic.Client
+		var (
+			client    *elastic.Client
+			esVersion string
+		)
 
-		if client, err = elastic.NewClient(options...); err == nil {
-			c.client.Store(client)
-			c.cfg.Store(config)
-			c.sinkFile = sinkFile
+		if client, err = elastic.NewClient(options...); err != nil {
+			return
 		}
+
+		if esVersion, err = client.ElasticsearchVersion(c.addr); err != nil {
+			return
+		}
+
+		slog.Info(
+			"Latency system's elastic info",
+			slog.String("version", esVersion),
+		)
+
+		c.client.Store(client)
+		c.cfg.Store(config)
+		c.sinkFile = sinkFile
 	})
 
 	return
@@ -264,7 +279,7 @@ func (c *LatencyClient) runQuerier(
 		for {
 			select {
 			case <-c.runCtx.Done():
-				slog.Info("current query context done")
+				c.cancelRun("current query context done")
 				return
 			default:
 				latency, err := c.getLatency()
@@ -307,7 +322,7 @@ func (c *LatencyClient) runQuerier(
 
 				select {
 				case <-c.runCtx.Done():
-					slog.Info("current query context done")
+					c.cancelRun("current query context done")
 					return
 				case <-time.After(interval):
 				}
@@ -326,6 +341,8 @@ func (c *LatencyClient) runReporter() {
 		})
 
 		c.reporterDone.Done()
+
+		slog.Info("all reporters exitted")
 	}()
 
 	for latency := range c.notify {
@@ -405,9 +422,11 @@ func (c *LatencyClient) Start(interval time.Duration) (err error) {
 
 		c.notify = make(chan []*exFrontLatency, 10)
 
-		if err = c.runQuerier(time.Second * 5); err == nil {
-			go c.runReporter()
+		if err = c.runQuerier(time.Second * 5); err != nil {
+			return
 		}
+
+		go c.runReporter()
 	})
 
 	return
@@ -419,8 +438,14 @@ func (c *LatencyClient) Join() error {
 	return <-c.watchRun
 }
 
-func (c *LatencyClient) Stop() {
-	slog.Info("stopping current query&report runner")
+func (c *LatencyClient) cancelRun(msg string) {
+	c.stopOnce.Do(func() {
+		c.runCancel()
 
-	c.runCancel()
+		slog.Info(msg)
+	})
+}
+
+func (c *LatencyClient) Stop() {
+	c.cancelRun("stopping current query&report runner")
 }

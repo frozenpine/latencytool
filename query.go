@@ -205,6 +205,16 @@ type TimeRange struct {
 	To   string
 }
 
+func (tr *TimeRange) Set(v string) error {
+	tr.From = v
+	tr.To = "now"
+	return nil
+}
+
+func (tr TimeRange) Type() string {
+	return "TimeRange"
+}
+
 func (tr TimeRange) String() string {
 	buff := bytebufferpool.Get()
 	defer bytebufferpool.Put(buff)
