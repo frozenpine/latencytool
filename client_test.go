@@ -17,11 +17,14 @@ func TestQuery(t *testing.T) {
 		"http", "10.36.51.124", 9200, "",
 		&QueryConfig{
 			Tick2Order: Tick2Order{To: 100000000},
-			TimeRange:  TimeRange{"1m", "now"},
-			AggSize:    15,
-			AggCount:   5,
-			Quantile:   Quantile{10, 25, 50, 75, 90},
-			SortBy:     "params.mid + params.stdev",
+			TimeRange: TimeRange{
+				TimeFrom: "2025-06-13T09:30:00+08:00",
+				TimeTo:   "2025-06-13T09:40:00+08:00",
+			},
+			AggSize:  15,
+			AggCount: 5,
+			Quantile: Quantile{10, 25, 50, 75, 90},
+			DataSize: 100,
 		},
 	); err != nil {
 		t.Fatal(err)

@@ -6,6 +6,7 @@ package cmd
 import (
 	"time"
 
+	"github.com/frozenpine/latency4go"
 	"github.com/spf13/cobra"
 )
 
@@ -44,7 +45,15 @@ func init() {
 	watchCmd.Flags().Duration(
 		"interval", time.Minute, "Override default interval arg",
 	)
+	watchCmd.Flags().IntVar(
+		&config.DataSize, "data", 0, "Specify return data size",
+	)
 	watchCmd.Flags().Bool(
 		"once", false, "Run watcher once, conflict & override interval",
+	)
+	watchCmd.Flags().Var(
+		&config.TimeRange, "range",
+		"Time range kwargs[key=value] seperated by "+
+			latency4go.TIMERANGE_KW_SPLIT,
 	)
 }

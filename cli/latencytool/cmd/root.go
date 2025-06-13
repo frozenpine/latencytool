@@ -31,9 +31,7 @@ var (
 	cmdCancel context.CancelFunc
 
 	client atomic.Pointer[latency4go.LatencyClient]
-	config latency4go.QueryConfig = latency4go.QueryConfig{
-		TimeRange: latency4go.TimeRange{From: "1m", To: "now"},
-	}
+	config latency4go.QueryConfig = latency4go.DummyQueryConfig
 )
 
 var (

@@ -151,11 +151,12 @@ func (c *LatencyClient) getLatency() ([]*exFrontLatency, error) {
 	}
 
 	if rsp.Hits.TotalHits.Value > 0 {
+		// print data record
 		for _, hit := range rsp.Hits.Hits {
 			if v, err := hit.Source.MarshalJSON(); err != nil {
 				return nil, errors.Join(ErrReadResponse, err)
 			} else {
-				slog.Debug(
+				slog.Info(
 					"hits data",
 					slog.String("record", string(v)),
 				)

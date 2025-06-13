@@ -2,10 +2,13 @@ package latency4go
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/olivere/elastic/v7"
 	"github.com/valyala/bytebufferpool"
@@ -200,14 +203,67 @@ func ConvertSlice[S, D any](source []S, cvt func(S) D) []D {
 	return result
 }
 
-type TimeRange struct {
-	From string
-	To   string
-}
+type timeRangeKey string
+
+var (
+	errInvalidTimeRangeArg = errors.New("invalid time range arg")
+)
+
+const TIMERANGE_KW_SPLIT = ";"
+const (
+	TimeBefore     timeRangeKey = "before"
+	TimeFrom       timeRangeKey = "from"
+	TimeTo         timeRangeKey = "to"
+	TimeBucket     timeRangeKey = "bucket"
+	TimeBucketSize timeRangeKey = "size"
+)
+
+type TimeRange map[timeRangeKey]string
+type Range [2]string
 
 func (tr *TimeRange) Set(v string) error {
-	tr.From = v
-	tr.To = "now"
+	if *tr == nil {
+		*tr = make(TimeRange)
+	}
+
+	pairs := ConvertSlice(
+		strings.Split(v, TIMERANGE_KW_SPLIT),
+		func(v string) string {
+			return strings.TrimSpace(v)
+		},
+	)
+
+	for _, kv := range pairs {
+		values := strings.SplitN(kv, "=", 2)
+
+		if len(values) != 2 {
+			// support for single before arg
+			(*tr)[TimeBefore] = values[0]
+		} else {
+			key := timeRangeKey(values[0])
+			value := values[1]
+
+			switch key {
+			case TimeBefore:
+				// TODO: elastic duration string check
+			case TimeFrom, TimeTo:
+				v, err := time.ParseInLocation("2006-01-02T15:04:05", value, time.Local)
+
+				if err != nil {
+					return errors.Join(errInvalidTimeRangeArg, err)
+				}
+
+				value = v.Format(time.RFC3339)
+			case TimeBucket, TimeBucketSize:
+
+			default:
+				return errInvalidTimeRangeArg
+			}
+
+			(*tr)[key] = value
+		}
+	}
+
 	return nil
 }
 
@@ -215,16 +271,46 @@ func (tr TimeRange) Type() string {
 	return "TimeRange"
 }
 
+func (tr TimeRange) GetRange() (result Range) {
+	before := tr[TimeBefore]
+	from := tr[TimeFrom]
+	to := tr[TimeTo]
+	// bucket := tr[TimeBucket]
+	// size := tr[TimeBucketSize]
+
+	switch {
+	case from != "" && to != "":
+		result[0] = from
+		result[1] = to
+
+		return
+	case before != "" && (from == "" || to == ""):
+		result[0] = "now-" + before
+		result[1] = "now"
+		return
+	default:
+		slog.Error(
+			"invalid or unsupported kwargs, fallback to before[5m]",
+			slog.Any("kwargs", tr),
+		)
+	}
+
+	result[0] = "now-5m"
+	result[1] = "now"
+
+	return
+}
+
 func (tr TimeRange) String() string {
 	buff := bytebufferpool.Get()
 	defer bytebufferpool.Put(buff)
 
+	values := tr.GetRange()
+
 	buff.WriteString("TimeRange{")
-	buff.WriteString(tr.To)
-	buff.WriteByte('-')
-	buff.WriteString(tr.From)
+	buff.WriteString(values[0])
 	buff.WriteString(" ~ ")
-	buff.WriteString(tr.To)
+	buff.WriteString(values[1])
 	buff.WriteString("}")
 
 	return buff.String()
@@ -282,6 +368,12 @@ type QueryConfig struct {
 	SortBy string
 }
 
+var DummyQueryConfig QueryConfig = QueryConfig{
+	TimeRange: TimeRange{
+		TimeBefore: "5m",
+	},
+}
+
 func (cfg *QueryConfig) String() string {
 	buff := bytebufferpool.Get()
 	defer bytebufferpool.Put(buff)
@@ -306,19 +398,15 @@ func (cfg *QueryConfig) String() string {
 }
 
 func (cfg *QueryConfig) makeQuery() (elastic.Query, elastic.Aggregation) {
-	timeRange := []string{"now-1d/d", cfg.TimeRange.To}
-
-	if cfg.TimeRange.From != "" {
-		timeRange[0] = fmt.Sprintf("now-%s", cfg.TimeRange.From)
-	}
+	rangeValue := cfg.TimeRange.GetRange()
 
 	var filters = []elastic.Query{
 		elastic.NewRangeQuery(
 			TIMERANGE_TERM,
 		).Gte(
-			timeRange[0],
+			rangeValue[0],
 		).Lte(
-			timeRange[1],
+			rangeValue[1],
 		).Format("strict_date_optional_time"),
 	}
 
@@ -366,7 +454,8 @@ func (cfg *QueryConfig) makeQuery() (elastic.Query, elastic.Aggregation) {
 		elastic.NewScript(sortBy),
 	)
 
-	terms := elastic.NewTermsAggregation().Field(
+	// TODO: 时间窗口分组
+	frontTerms := elastic.NewTermsAggregation().Field(
 		AGGREGATION_TERM,
 	).OrderByAggregation(
 		EXCHANGE_LATENCY_PERCENTS+".50", true,
@@ -380,5 +469,5 @@ func (cfg *QueryConfig) makeQuery() (elastic.Query, elastic.Aggregation) {
 		EXCHANGE_LATENCY_PRIORITY, priAgg,
 	)
 
-	return boolFilter, terms
+	return boolFilter, frontTerms
 }
