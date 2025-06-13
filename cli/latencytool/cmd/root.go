@@ -11,15 +11,18 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/natefinch/lumberjack.v2"
+
+	"github.com/frozenpine/latency4go"
 )
 
 var (
 	version, goVersion, gitVersion, buildTime string
-	verbose                                   bool
+	verbose                                   int
 	logFile                                   string
 	logSize                                   int
 	logKeep                                   int
@@ -27,46 +30,78 @@ var (
 	cmdCtx    context.Context
 	cmdCancel context.CancelFunc
 
-	reporterDir string
+	client atomic.Pointer[latency4go.LatencyClient]
 )
 
 var (
-	errInvalidArgs = errors.New("invalid args")
+	errInvalidInstance = errors.New("invalid instance")
+	errInvalidArgs     = errors.New("invalid args")
 )
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "cli",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Use:   "latencytool",
+	Short: "Trading latency monitoring & reporting",
+	Long: `Check & sort exchange's fronts by latency(onetime | periodically), 
+and report to trading systems`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
+	Run: func(cmd *cobra.Command, args []string) {
+		cmd.Help()
+	},
 	Version: fmt.Sprintf(
 		"%s, Commit: %s, Build: %s@%s",
 		version, gitVersion, buildTime, goVersion,
 	),
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if reporterDir == "" {
-			return fmt.Errorf(
-				"%w: data base DIR not specified", errInvalidArgs,
-			)
+		if cmd.Name() == cmd.Root().Name() {
+			return nil
 		}
 
+		schema, _ := cmd.Flags().GetString("schema")
+		host, _ := cmd.Flags().GetString("host")
+		port, _ := cmd.Flags().GetInt("port")
+		sink, _ := cmd.Flags().GetString("sink")
+
+		ins := latency4go.LatencyClient{}
+
+		if err := ins.Init(
+			cmdCtx, schema, host, port, sink,
+			&latency4go.QueryConfig{},
+		); err != nil {
+			return errors.Join(err, errInvalidArgs, errInvalidInstance)
+		}
+
+		client.Store(&ins)
+
 		return nil
+	},
+	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+		if cmd.Name() == cmd.Root().Name() {
+			return nil
+		}
+
+		if ins := client.Load(); ins != nil {
+			ins.Stop()
+
+			return ins.Join()
+		} else {
+			return errInvalidInstance
+		}
 	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
+	defer cmdCancel()
+
+	if err := rootCmd.Execute(); err != nil {
+		slog.Error(
+			"latency tool run failed",
+			slog.Any("error", err),
+		)
+
 		os.Exit(1)
 	}
 }
@@ -94,11 +129,13 @@ func initConfig() {
 		); err != nil {
 			panic(err)
 		}
+
+		logWr = io.MultiWriter(logWr, os.Stderr)
 	} else {
 		logWr = os.Stderr
 	}
 
-	if verbose {
+	if verbose > 0 {
 		level = slog.LevelDebug
 		addSource = true
 	}
@@ -126,8 +163,8 @@ func init() {
 		syscall.SIGQUIT, syscall.SIGTERM, os.Interrupt,
 	)
 
-	rootCmd.PersistentFlags().BoolVarP(
-		&verbose, "verbose", "v", false, "Running in debug mode")
+	rootCmd.PersistentFlags().CountVarP(
+		&verbose, "verbose", "v", "Running in debug mode")
 	rootCmd.PersistentFlags().StringVar(
 		&logFile, "log", "", "Log file path")
 	rootCmd.PersistentFlags().IntVar(
@@ -135,11 +172,20 @@ func init() {
 	rootCmd.PersistentFlags().IntVar(
 		&logKeep, "keep", 5, "Log archive keep count")
 
+	rootCmd.PersistentFlags().String(
+		"schema", "http", "",
+	)
+	rootCmd.PersistentFlags().String(
+		"host", "10.36.51.124", "",
+	)
+	rootCmd.PersistentFlags().Int(
+		"port", 9200, "",
+	)
+	rootCmd.PersistentFlags().Duration(
+		"interval", 0, "",
+	)
+
 	for _, cmd := range rootCmd.Commands() {
 		cmd.Version = rootCmd.Version
 	}
-
-	rootCmd.PersistentFlags().StringVar(
-		&reporterDir, "reporter", "", "Reporter lib DIR",
-	)
 }

@@ -1,0 +1,70 @@
+{
+    "aggs": {
+        "aggs_results": {
+            "terms": {
+                "field": "exchangeAddr.keyword",
+                "order": {
+                    "exchange_latency_percents.50": "asc"
+                },
+                "min_doc_count": 50,
+                "size": 15
+            },
+            "aggs": {
+                "exchange_latency_percents": {
+                    "percentiles": {
+                        "field": "交易所延迟",
+                        "percents": [
+                            10,
+                            25,
+                            50,
+                            75,
+                            90
+                        ],
+                        "keyed": false
+                    }
+                },
+                "exchange_latency_extra": {
+                    "extended_stats": {
+                        "field": "交易所延迟"
+                    }
+                },
+                "priority_calcuted": {
+                    "bucket_script": {
+                        "buckets_path": {
+                            "mid": "exchange_latency_percents.50",
+                            "avg": "exchange_latency_extra.avg"
+                        },
+                        "script": "params.mid"
+                    }
+                }
+            }
+        }
+    },
+    "size": 0,
+    "query": {
+        "bool": {
+            "must": [],
+            "filter": [
+                {
+                    "range": {
+                        "captureTimestamp": {
+                            "gte": "now-1d/d",
+                            "lte": "now",
+                            "format": "strict_date_optional_time"
+                        }
+                    }
+                },
+                {
+                    "range": {
+                        "mdLatency": {
+                            "gt": 0,
+                            "lte": 10000000
+                        }
+                    }
+                }
+            ],
+            "should": [],
+            "must_not": []
+        }
+    }
+}

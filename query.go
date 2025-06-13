@@ -12,15 +12,18 @@ import (
 )
 
 const (
-	TIMERANGE_TERM            string = "captureTimestamp"
-	USERS_TERM                string = "用户代码"
-	TICK2ORDER_TERM           string = "mdLatency"
-	EXCHANGE_LATENCY_MAX      string = "exchange_latency_max"
-	EXCHANGE_LATENCY_MIN      string = "exchange_latency_min"
+	TIMERANGE_TERM  string = "captureTimestamp"
+	USERS_TERM      string = "用户代码"
+	TICK2ORDER_TERM string = "mdLatency"
+
+	AGGREGATION_TERM    string = "exchangeAddr.keyword"
+	AGGREGATION_FIELD   string = "交易所延迟"
+	AGGREGATION_RESULTS string = "aggs_results"
+
 	EXCHANGE_LATENCY_PERCENTS string = "exchange_latency_percents"
-	AGGREGATION_TERM          string = "exchangeAddr.keyword"
-	AGGREGATION_FIELD         string = "交易所延迟"
-	AGGREGATION_RESULTS       string = "aggs_results"
+	EXCHANGE_LATENCY_EXTRA    string = "exchange_latency_extra"
+	EXCHANGE_LATENCY_PRIORITY string = "exchange_latency_prority"
+	DEFAULT_SORT              string = "params.mid"
 )
 
 type percentResults map[float64]float64
@@ -80,10 +83,16 @@ func (p percentResults) String() string {
 }
 
 type exFrontLatency struct {
-	FrontAddr  string
-	MaxLatency float64
-	MinLatency float64
-	Percents   percentResults
+	FrontAddr          string
+	MaxLatency         float64
+	MinLatency         float64
+	AvgLatency         float64
+	VarLatency         float64
+	StdevLatency       float64
+	SampleStdevLatency float64
+	Percents           percentResults
+	Priority           float64
+	DocCount           int64
 }
 
 func (l *exFrontLatency) UnmarshalJSON(data []byte) error {
@@ -93,15 +102,57 @@ func (l *exFrontLatency) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	if err := json.Unmarshal(values["FrontAddr"], &l.FrontAddr); err != nil {
+	if err := json.Unmarshal(
+		values["FrontAddr"], &l.FrontAddr,
+	); err != nil {
 		return err
 	}
 
-	if err := json.Unmarshal(values["MaxLatency"], &l.MaxLatency); err != nil {
+	if err := json.Unmarshal(
+		values["MaxLatency"], &l.MaxLatency,
+	); err != nil {
 		return err
 	}
 
-	if err := json.Unmarshal(values["MinLatency"], &l.MinLatency); err != nil {
+	if err := json.Unmarshal(
+		values["MinLatency"], &l.MinLatency,
+	); err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(
+		values["AvgLatency"], &l.AvgLatency,
+	); err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(
+		values["VarLatency"], &l.VarLatency,
+	); err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(
+		values["StdevLatency"], &l.StdevLatency,
+	); err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(
+		values["SampleStdevLatency"], &l.SampleStdevLatency,
+	); err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(
+		values["Priority"], &l.Priority,
+	); err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(
+		values["DocCount"], &l.DocCount,
+	); err != nil {
 		return err
 	}
 
@@ -116,12 +167,24 @@ func (l exFrontLatency) String() string {
 
 	buff.WriteString("FrontLantecy{FrontAddr:")
 	buff.WriteString(l.FrontAddr)
+	buff.WriteString(" Priority:")
+	buff.WriteString(strconv.FormatFloat(l.Priority, 'f', -1, 64))
 	buff.WriteString(" MaxLatency:")
 	buff.WriteString(strconv.FormatFloat(l.MaxLatency, 'f', -1, 64))
 	buff.WriteString(" MinLantecy:")
 	buff.WriteString(strconv.FormatFloat(l.MinLatency, 'f', -1, 64))
+	buff.WriteString(" AvgLatency:")
+	buff.WriteString(strconv.FormatFloat(l.AvgLatency, 'f', -1, 64))
+	buff.WriteString(" VarLatency:")
+	buff.WriteString(strconv.FormatFloat(l.VarLatency, 'f', -1, 64))
+	buff.WriteString(" StdevLatency:")
+	buff.WriteString(strconv.FormatFloat(l.StdevLatency, 'f', -1, 64))
+	buff.WriteString(" SampleStdevLatency:")
+	buff.WriteString(strconv.FormatFloat(l.SampleStdevLatency, 'f', -1, 64))
 	buff.WriteString(" Percents:")
 	buff.WriteString(l.Percents.String())
+	buff.WriteString(" DocCount:")
+	buff.WriteString(strconv.FormatInt(l.DocCount, 10))
 	buff.WriteString("}")
 
 	return buff.String()
@@ -147,6 +210,8 @@ func (tr TimeRange) String() string {
 	defer bytebufferpool.Put(buff)
 
 	buff.WriteString("TimeRange{")
+	buff.WriteString(tr.To)
+	buff.WriteByte('-')
 	buff.WriteString(tr.From)
 	buff.WriteString(" ~ ")
 	buff.WriteString(tr.To)
@@ -184,7 +249,10 @@ type QueryConfig struct {
 
 	DataSize int
 	AggSize  int
+	AggCount int
 	Quantile Quantile
+
+	SortBy string
 }
 
 func (cfg *QueryConfig) String() string {
@@ -201,6 +269,8 @@ func (cfg *QueryConfig) String() string {
 	buff.WriteString(strconv.Itoa(cfg.DataSize))
 	buff.WriteString(" AggSize:")
 	buff.WriteString(strconv.Itoa(cfg.AggSize))
+	buff.WriteString(" AggCount:")
+	buff.WriteString(strconv.Itoa(cfg.AggCount))
 	buff.WriteString(" Quantiles:")
 	buff.WriteString(fmt.Sprint(cfg.Quantile))
 	buff.WriteString("}")
@@ -249,22 +319,38 @@ func (cfg *QueryConfig) makeQuery() (elastic.Query, elastic.Aggregation) {
 	boolFilter := elastic.NewBoolQuery()
 	boolFilter.Filter(filters...)
 
-	maxAgg := elastic.NewMaxAggregation().Field(AGGREGATION_FIELD)
-	minAgg := elastic.NewMinAggregation().Field(AGGREGATION_FIELD)
+	var sortBy = DEFAULT_SORT
+	if cfg.SortBy != "" {
+		sortBy = DEFAULT_SORT
+	}
+
+	extAgg := elastic.NewExtendedStatsAggregation().Field(AGGREGATION_FIELD)
 	percentileAgg := elastic.NewPercentilesAggregation().Field(
 		AGGREGATION_FIELD,
 	).Percentiles(cfg.Quantile...)
+	priAgg := elastic.NewBucketScriptAggregation().BucketsPathsMap(
+		map[string]string{
+			"mid":          EXCHANGE_LATENCY_PERCENTS + ".50",
+			"avg":          EXCHANGE_LATENCY_EXTRA + ".avg",
+			"stdev":        EXCHANGE_LATENCY_EXTRA + ".std_deviation",
+			"sample_stdev": EXCHANGE_LATENCY_EXTRA + ".std_deviation_sampling",
+		},
+	).Script(
+		elastic.NewScript(sortBy),
+	)
 
 	terms := elastic.NewTermsAggregation().Field(
 		AGGREGATION_TERM,
 	).OrderByAggregation(
 		EXCHANGE_LATENCY_PERCENTS+".50", true,
+	).MinDocCount(
+		cfg.AggCount,
 	).SubAggregation(
 		EXCHANGE_LATENCY_PERCENTS, percentileAgg,
 	).SubAggregation(
-		EXCHANGE_LATENCY_MIN, minAgg,
+		EXCHANGE_LATENCY_EXTRA, extAgg,
 	).SubAggregation(
-		EXCHANGE_LATENCY_MAX, maxAgg,
+		EXCHANGE_LATENCY_PRIORITY, priAgg,
 	)
 
 	return boolFilter, terms

@@ -1,12 +1,14 @@
 package latency4go
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -19,6 +21,7 @@ var (
 	ErrNotInitialized     = errors.New("client not initialized")
 	ErrAlreadyInitialized = errors.New("client already initialized")
 	ErrAlreadyStarted     = errors.New("client already started")
+	ErrReadResponse       = errors.New("read rsp failed")
 	ErrParseAggResult     = errors.New("parse aggregation failed")
 	ErrInvalidQueryCfg    = errors.New("invalid query config")
 	ErrInvalidReporter    = errors.New("invalid reporter")
@@ -42,12 +45,13 @@ type LatencyClient struct {
 	addr   string
 	client atomic.Pointer[elastic.Client]
 
-	startOnce sync.Once
-	runCtx    context.Context
-	runCancel context.CancelFunc
-	watchRun  chan error
-	cfg       atomic.Pointer[QueryConfig]
-	notify    chan []*exFrontLatency
+	startOnce   sync.Once
+	runCtx      context.Context
+	runCancel   context.CancelFunc
+	watchRun    chan error
+	cfg         atomic.Pointer[QueryConfig]
+	qryInterval atomic.Pointer[time.Duration]
+	notify      chan []*exFrontLatency
 
 	sinkFile     string
 	reporterDone sync.WaitGroup
@@ -83,17 +87,13 @@ func (c *LatencyClient) Init(
 			elastic.SetSniff(false),
 		}
 
-		verbose, ok := ctx.Value(CTX_VERBOSE_KEY).(bool)
-
-		if ok && verbose {
-			options = append(options, elastic.SetTraceLog(
-				slog.NewLogLogger(
-					esLogHandler, slog.LevelDebug)))
-		}
+		options = append(options, elastic.SetTraceLog(
+			slog.NewLogLogger(
+				esLogHandler, slog.LevelDebug-1)))
 
 		var client *elastic.Client
 
-		if client, err = elastic.NewClient(options...); err != nil {
+		if client, err = elastic.NewClient(options...); err == nil {
 			c.client.Store(client)
 			c.cfg.Store(config)
 			c.sinkFile = sinkFile
@@ -111,7 +111,8 @@ func (c *LatencyClient) GetVersion() (string, error) {
 	return "", ErrNotInitialized
 }
 
-func (c *LatencyClient) getLatency(cfg *QueryConfig) ([]*exFrontLatency, error) {
+func (c *LatencyClient) getLatency() ([]*exFrontLatency, error) {
+	cfg := c.cfg.Load()
 	if cfg == nil {
 		return nil, ErrInvalidQueryCfg
 	}
@@ -131,16 +132,13 @@ func (c *LatencyClient) getLatency(cfg *QueryConfig) ([]*exFrontLatency, error) 
 	).Do(qryCtx)
 
 	if err != nil {
-		return nil, err
+		return nil, errors.Join(ErrReadResponse, err)
 	}
 
 	if rsp.Hits.TotalHits.Value > 0 {
 		for _, hit := range rsp.Hits.Hits {
 			if v, err := hit.Source.MarshalJSON(); err != nil {
-				slog.Error(
-					"read hits data failed",
-					slog.Any("error", err),
-				)
+				return nil, errors.Join(ErrReadResponse, err)
 			} else {
 				slog.Debug(
 					"hits data",
@@ -152,55 +150,57 @@ func (c *LatencyClient) getLatency(cfg *QueryConfig) ([]*exFrontLatency, error) 
 
 	termResults, ok := rsp.Aggregations.Terms(AGGREGATION_RESULTS)
 	if !ok {
-		slog.Error("parse terms data failed")
-
-		return nil, ErrParseAggResult
+		return nil, fmt.Errorf("%w: get terms failed", ErrParseAggResult)
 	}
 
 	latencyList := []*exFrontLatency{}
 
-	for idx, r := range termResults.Buckets {
+	for _, r := range termResults.Buckets {
 		front, ok := r.Key.(string)
 		if !ok {
-			slog.Error(
-				"parse front addr failed",
-				slog.Any("key", r.Key),
+			return nil, fmt.Errorf(
+				"%w: parse front addr failed", ErrParseAggResult,
 			)
 		}
 
-		max, ok := r.Aggregations.Max(EXCHANGE_LATENCY_MAX)
-		if !ok {
-			slog.Error(
-				"parse latency max failed",
-				slog.String("addr", *r.KeyAsString),
-				slog.String("key", EXCHANGE_LATENCY_MAX),
-			)
-			continue
-		}
-		min, ok := r.Aggregations.Min(EXCHANGE_LATENCY_MIN)
-		if !ok {
-			slog.Error(
-				"parse latency min failed",
-				slog.String("addr", *r.KeyAsString),
-				slog.String("key", EXCHANGE_LATENCY_MIN),
-			)
-			continue
-		}
 		percentiles, ok := r.Aggregations.Percentiles(EXCHANGE_LATENCY_PERCENTS)
 		if !ok {
-			slog.Error(
-				"parse latency percents failed",
-				slog.String("addr", *r.KeyAsString),
-				slog.String("key", EXCHANGE_LATENCY_PERCENTS),
+			return nil, fmt.Errorf(
+				"%w: parse latency percents failed", ErrParseAggResult,
 			)
-			continue
+		}
+
+		extra, ok := r.Aggregations.ExtendedStats(EXCHANGE_LATENCY_EXTRA)
+		if !ok {
+			return nil, fmt.Errorf(
+				"%w: parse latency extra failed", ErrParseAggResult,
+			)
+		}
+
+		pri, ok := r.Aggregations.BucketScript(EXCHANGE_LATENCY_PRIORITY)
+		if !ok {
+			return nil, fmt.Errorf(
+				"%w: parse latency priority failed", ErrParseAggResult,
+			)
 		}
 
 		latency := exFrontLatency{
-			FrontAddr:  front,
-			MaxLatency: *max.Value,
-			MinLatency: *min.Value,
-			Percents:   make(percentResults),
+			FrontAddr:    front,
+			Priority:     *pri.Value,
+			MaxLatency:   *extra.Max,
+			MinLatency:   *extra.Min,
+			AvgLatency:   *extra.Avg,
+			VarLatency:   *extra.Variance,
+			StdevLatency: *extra.StdDeviation,
+			DocCount:     r.DocCount,
+			Percents:     make(percentResults),
+		}
+
+		if err := json.Unmarshal(
+			extra.Aggregations["std_deviation_sampling"],
+			&latency.SampleStdevLatency,
+		); err != nil {
+			return nil, errors.Join(ErrParseAggResult, err)
 		}
 
 		for k, v := range percentiles.Values {
@@ -208,13 +208,19 @@ func (c *LatencyClient) getLatency(cfg *QueryConfig) ([]*exFrontLatency, error) 
 			latency.Percents[percent] = v
 		}
 
+		latencyList = append(latencyList, &latency)
+	}
+
+	slices.SortFunc(latencyList, func(l, r *exFrontLatency) int {
+		return cmp.Compare(l.Priority, r.Priority)
+	})
+
+	for idx, latency := range latencyList {
 		slog.Info(
 			"latency results",
 			slog.Int("rank", idx+1),
 			slog.Any("latency", latency),
 		)
-
-		latencyList = append(latencyList, &latency)
 	}
 
 	return latencyList, nil
@@ -239,9 +245,14 @@ func (c *LatencyClient) sinkLatency(latency []*exFrontLatency) error {
 	return os.WriteFile(c.sinkFile, data, os.ModePerm)
 }
 
-func (c *LatencyClient) runQuerier(interval time.Duration, timeout time.Duration) error {
+func (c *LatencyClient) runQuerier(
+	timeout time.Duration,
+) error {
 	c.runCtx, c.runCancel = context.WithCancel(c.ctx)
 	c.watchRun = make(chan error, 1)
+
+	// self log reporter
+	c.reporterDone.Add(1)
 
 	go func() {
 		defer func() {
@@ -250,29 +261,21 @@ func (c *LatencyClient) runQuerier(interval time.Duration, timeout time.Duration
 			c.runCancel()
 		}()
 
-		if interval > 0 {
-			slog.Info(
-				"latency checker running periodically",
-				slog.Duration("interval", interval),
-			)
-		}
-
 		for {
 			select {
 			case <-c.runCtx.Done():
+				slog.Info("current query context done")
 				return
 			default:
-				latency, err := c.getLatency(c.cfg.Load())
+				latency, err := c.getLatency()
 
 				if err != nil {
 					slog.Error(
 						"query latency failed",
 						slog.Any("error", err),
 					)
-				}
 
-				// 一次性运行，直接退出
-				if interval <= 0 {
+					c.watchRun <- err
 					return
 				}
 
@@ -291,8 +294,20 @@ func (c *LatencyClient) runQuerier(interval time.Duration, timeout time.Duration
 					)
 				}
 
+				var interval time.Duration
+				if v := c.qryInterval.Load(); v != nil {
+					interval = *v
+				}
+
+				// 一次性运行，直接退出
+				if interval <= 0 {
+					slog.Info("no interval specified, one time running.")
+					return
+				}
+
 				select {
 				case <-c.runCtx.Done():
+					slog.Info("current query context done")
 					return
 				case <-time.After(interval):
 				}
@@ -309,6 +324,8 @@ func (c *LatencyClient) runReporter() {
 			c.reporterDone.Done()
 			return true
 		})
+
+		c.reporterDone.Done()
 	}()
 
 	for latency := range c.notify {
@@ -375,9 +392,20 @@ func (c *LatencyClient) Start(interval time.Duration) (err error) {
 	}
 
 	c.startOnce.Do(func() {
+		if interval > 0 {
+			slog.Info(
+				"starting latency client with interval",
+				slog.Duration("interval", interval),
+			)
+
+			c.qryInterval.Store(&interval)
+		} else {
+			slog.Info("onetime running latency client")
+		}
+
 		c.notify = make(chan []*exFrontLatency, 10)
 
-		if err = c.runQuerier(interval, time.Second*5); err != nil {
+		if err = c.runQuerier(time.Second * 5); err == nil {
 			go c.runReporter()
 		}
 	})
@@ -385,10 +413,14 @@ func (c *LatencyClient) Start(interval time.Duration) (err error) {
 	return
 }
 
-func (c *LatencyClient) Stop() error {
-	c.runCancel()
-
+func (c *LatencyClient) Join() error {
 	c.reporterDone.Wait()
 
 	return <-c.watchRun
+}
+
+func (c *LatencyClient) Stop() {
+	slog.Info("stopping current query&report runner")
+
+	c.runCancel()
 }
