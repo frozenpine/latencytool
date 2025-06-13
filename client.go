@@ -316,7 +316,7 @@ func (c *LatencyClient) runQuerier(
 
 				// 一次性运行，直接退出
 				if interval <= 0 {
-					slog.Info("no interval specified, one time running.")
+					c.cancelRun("no interval specified, one time running.")
 					return
 				}
 
