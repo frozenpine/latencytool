@@ -106,7 +106,7 @@ func Execute() {
 	}
 }
 
-func initConfig() {
+func initLog() {
 	var (
 		level     = slog.LevelInfo
 		addSource bool
@@ -136,7 +136,7 @@ func initConfig() {
 	}
 
 	if verbose > 0 {
-		level = slog.LevelDebug
+		level = slog.LevelDebug - slog.Level(verbose-1)
 		addSource = true
 	}
 
@@ -149,7 +149,7 @@ func initConfig() {
 }
 
 func init() {
-	cobra.OnInitialize(initConfig)
+	cobra.OnInitialize(initLog)
 
 	// version string for all sub commands
 	for _, cmd := range rootCmd.Commands() {

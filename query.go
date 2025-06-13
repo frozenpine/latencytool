@@ -1,6 +1,7 @@
 package latency4go
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -247,7 +248,9 @@ func (tr *TimeRange) Set(v string) error {
 			case TimeBefore:
 				// TODO: elastic duration string check
 			case TimeFrom, TimeTo:
-				v, err := time.ParseInLocation("2006-01-02T15:04:05", value, time.Local)
+				v, err := time.ParseInLocation(
+					"2006-01-02T15:04:05", value, time.Local,
+				)
 
 				if err != nil {
 					return errors.Join(errInvalidTimeRangeArg, err)
@@ -264,6 +267,11 @@ func (tr *TimeRange) Set(v string) error {
 		}
 	}
 
+	slog.Log(
+		context.Background(), SLOG_TRADE,
+		"time range set", slog.Any("time_range", tr),
+	)
+
 	return nil
 }
 
@@ -278,17 +286,17 @@ func (tr TimeRange) GetRange() (result Range) {
 	// bucket := tr[TimeBucket]
 	// size := tr[TimeBucketSize]
 
-	switch {
-	case from != "" && to != "":
+	if from != "" && to != "" {
 		result[0] = from
 		result[1] = to
 
 		return
-	case before != "" && (from == "" || to == ""):
+	} else if before != "" {
 		result[0] = "now-" + before
 		result[1] = "now"
+
 		return
-	default:
+	} else {
 		slog.Error(
 			"invalid or unsupported kwargs, fallback to before[5m]",
 			slog.Any("kwargs", tr),

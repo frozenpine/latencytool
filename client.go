@@ -30,6 +30,7 @@ var (
 type CTX_KEY string
 
 const CTX_VERBOSE_KEY CTX_KEY = "verbose"
+const SLOG_TRADE = slog.LevelDebug - 1
 
 const (
 	ELASTIC_DOCUMENTS = "alldelaystatistics202*"
