@@ -1,7 +1,6 @@
 package latency4go
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -266,11 +265,6 @@ func (tr *TimeRange) Set(v string) error {
 			(*tr)[key] = value
 		}
 	}
-
-	slog.Log(
-		context.Background(), SLOG_TRADE,
-		"time range set", slog.Any("time_range", tr),
-	)
 
 	return nil
 }
