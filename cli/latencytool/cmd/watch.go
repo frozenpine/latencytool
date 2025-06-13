@@ -4,6 +4,7 @@ Copyright © 2025 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"log/slog"
 	"time"
 
 	"github.com/frozenpine/latency4go"
@@ -19,7 +20,11 @@ with extra specified args`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		interval, _ := cmd.Flags().GetDuration("interval")
 		once, _ := cmd.Flags().GetBool("once")
-		if once {
+
+		if once || config.TimeRange[latency4go.TimeFrom] != "" {
+			slog.Info(
+				"args confilicted with --interval, set to onetime running",
+			)
 			interval = 0
 		}
 
@@ -46,10 +51,5 @@ func init() {
 	)
 	watchCmd.Flags().Bool(
 		"once", false, "Run watcher once, conflict & override interval",
-	)
-	watchCmd.Flags().Var(
-		&config.TimeRange, "range",
-		"Time range kwargs[key=value] seperated by "+
-			latency4go.TIMERANGE_KW_SPLIT,
 	)
 }

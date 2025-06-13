@@ -280,17 +280,23 @@ func (tr TimeRange) GetRange() (result Range) {
 	// bucket := tr[TimeBucket]
 	// size := tr[TimeBucketSize]
 
-	if from != "" && to != "" {
+	switch {
+	case from != "" && to != "":
 		result[0] = from
 		result[1] = to
 
 		return
-	} else if before != "" {
+	case from != "" && to == "":
+		result[0] = from
+		result[1] = "now"
+
+		return
+	case before != "" && from == "":
 		result[0] = "now-" + before
 		result[1] = "now"
 
 		return
-	} else {
+	default:
 		slog.Error(
 			"invalid or unsupported kwargs, fallback to before[5m]",
 			slog.Any("kwargs", tr),

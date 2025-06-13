@@ -188,6 +188,11 @@ func init() {
 	rootCmd.PersistentFlags().Var(
 		&config.TimeRange, "before", "Lantency doc time range before now",
 	)
+	rootCmd.PersistentFlags().Var(
+		&config.TimeRange, "range",
+		"Time range kwargs[key=value] seperated by "+
+			latency4go.TIMERANGE_KW_SPLIT,
+	)
 	rootCmd.PersistentFlags().IntVar(
 		&config.Tick2Order.From, "from", 0,
 		"Tick2Order range left bound in PicoSec",
