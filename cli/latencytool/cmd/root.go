@@ -188,7 +188,7 @@ func init() {
 	)
 
 	rootCmd.PersistentFlags().Var(
-		&config.TimeRange, "before", "Lantency",
+		&config.TimeRange, "before", "Lantency doc time range before now",
 	)
 	rootCmd.PersistentFlags().IntVar(
 		&config.Tick2Order.From, "from", 0,

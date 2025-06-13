@@ -252,6 +252,23 @@ type Users []string
 
 type Quantile []float64
 
+func (q Quantile) String() string {
+	buff := bytebufferpool.Get()
+	defer bytebufferpool.Put(buff)
+
+	buff.WriteString("[")
+	for idx, v := range q {
+		if idx > 0 {
+			buff.WriteByte(' ')
+		}
+
+		buff.WriteString(strconv.FormatFloat(v, 'f', -1, 64))
+	}
+	buff.WriteString("]")
+
+	return buff.String()
+}
+
 type QueryConfig struct {
 	Tick2Order Tick2Order
 	TimeRange  TimeRange
