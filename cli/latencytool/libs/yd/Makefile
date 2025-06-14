@@ -13,7 +13,7 @@ EXTRA_FLAGS=-X 'main.version=${VERSION}' \
 BINARY=${NAME}.plugin
 
 default:
-	@go build -buildmode=plugin -ldflags "${EXTRA_FLAGS}" -o ../${BINARY}
+	@go build -buildmode=c-shared -ldflags "${EXTRA_FLAGS}" -o ../${BINARY}
 
 list:
 	@echo ${PACKAGES}

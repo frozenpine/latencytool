@@ -55,9 +55,9 @@ type LatencyClient struct {
 	qryInterval atomic.Pointer[time.Duration]
 	notify      chan []*exFrontLatency
 
-	sinkFile     string
-	reporterDone sync.WaitGroup
-	reporters    sync.Map
+	sinkFile   string
+	reporterWg sync.WaitGroup
+	reporters  sync.Map
 }
 
 func (c *LatencyClient) Init(
@@ -269,7 +269,7 @@ func (c *LatencyClient) runQuerier(
 	c.watchRun = make(chan error, 1)
 
 	// self log reporter
-	c.reporterDone.Add(1)
+	c.reporterWg.Add(1)
 
 	go func() {
 		defer func() {
@@ -338,11 +338,11 @@ func (c *LatencyClient) runQuerier(
 func (c *LatencyClient) runReporter() {
 	defer func() {
 		c.reporters.Range(func(key, value any) bool {
-			c.reporterDone.Done()
+			c.reporterWg.Done()
 			return true
 		})
 
-		c.reporterDone.Done()
+		c.reporterWg.Done()
 
 		slog.Info("all reporters exitted")
 	}()
@@ -362,14 +362,14 @@ func (c *LatencyClient) runReporter() {
 
 			if !ok {
 				c.reporters.Delete(key)
-				c.reporterDone.Done()
+				c.reporterWg.Done()
 				return true
 			}
 
 			reportFn, ok := value.(Reporter)
 			if !ok {
 				c.reporters.Delete(key)
-				c.reporterDone.Done()
+				c.reporterWg.Done()
 
 				return true
 			}
@@ -401,6 +401,8 @@ func (c *LatencyClient) RegReporter(name string, reporter Reporter) error {
 	if !c.reporters.CompareAndSwap(name, nil, reporter) {
 		return ErrInvalidReporter
 	}
+
+	c.reporterWg.Add(1)
 
 	return nil
 }
@@ -435,7 +437,7 @@ func (c *LatencyClient) Start(interval time.Duration) (err error) {
 }
 
 func (c *LatencyClient) Join() error {
-	c.reporterDone.Wait()
+	c.reporterWg.Wait()
 
 	return <-c.watchRun
 }
