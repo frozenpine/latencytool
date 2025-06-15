@@ -1,4 +1,4 @@
-NAME="emc4go"
+NAME="rem4go"
 VERSION=1.0.0
 BUILD=`date +%FT%T%z`
 
@@ -10,10 +10,17 @@ EXTRA_FLAGS=-X 'main.version=${VERSION}' \
 			-X 'main.gitVersion=`git rev-parse --short HEAD`' \
 			-X 'main.buildTime=`date '+%Y-%m-%d %H:%M:%S'`'
 
-BINARY=${NAME}.plugin
+ifeq ($(OS), Windows_NT)
+	BINARY=${NAME}.dll
+else
+	BINARY=${NAME}.so
+endif
 
 default:
-	@go build -buildmode=c-shared -ldflags "${EXTRA_FLAGS}" -o ../${BINARY}
+	@go build -buildmode=c-shared -ldflags "${EXTRA_FLAGS}" -o ${BINARY}
+
+plugin:
+	@go build -buildmode=plugin -ldflags "${EXTRA_FLAGS}" -o ${name}.plugin
 
 list:
 	@echo ${PACKAGES}
@@ -43,6 +50,6 @@ vet:
 #     @docker build -t wuxiaoxiaoshen/example:latest .
 
 clean:
-	@if [ -f bin/${BINARY} ] ; then rm -f bin/${BINARY} ; fi
+	@if [ -f ${BINARY} ] ; then rm -f ${BINARY} ; fi
 
 .PHONY: default fmt fmt-check install test vet docker clean

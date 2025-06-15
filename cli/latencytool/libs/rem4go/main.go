@@ -8,18 +8,21 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"reflect"
 	"sync"
 	"unsafe"
 
 	"github.com/frozenpine/latency4go/cli/latencytool/libs"
-	"gitlab.devops.rdrk.com.cn/quant/yd4go"
+	"github.com/pelletier/go-toml/v2"
+	"gitlab.devops.rdrk.com.cn/quant/rem4go/emc"
 )
 
 var (
 	version, goVersion, gitVersion, buildTime string
 
-	api       = yd4go.YdApi{}
+	api       = emc.EmcApi{}
+	cfg       = emc.Config{}
 	apiCtx    context.Context
 	apiCancel context.CancelFunc
 	initOnce  = sync.Once{}
@@ -28,8 +31,8 @@ var (
 
 func init() {
 	fmt.Printf(
-		"[LIB emc4go] %s, Commit: %s, Build: %s@%s, YdApiVersion: %s",
-		version, gitVersion, buildTime, goVersion, yd4go.GetApiVersion(),
+		"[LIB emc4go] %s, Commit: %s, Build: %s@%s",
+		version, gitVersion, buildTime, goVersion,
 	)
 }
 
@@ -41,16 +44,33 @@ func Init(ctx context.Context, cfgPath string) (err error) {
 			ctx = context.Background()
 		}
 
-		apiCtx, apiCancel = context.WithCancel(ctx)
-
-		if !api.Init(apiCtx, cfgPath) {
-			err = fmt.Errorf(
-				"%w: Yd call api Init failed", libs.ErrInitFailed,
-			)
+		cfgFile, failed := os.OpenFile(cfgPath, os.O_RDONLY, os.ModePerm)
+		if failed != nil {
+			err = errors.Join(libs.ErrInitFailed, failed)
+			return
 		}
 
-		if !api.Login("", "", "", "") {
-			err = errors.New("request login failed")
+		decoder := toml.NewDecoder(cfgFile)
+
+		if failed := decoder.Decode(&map[string]any{
+			"emc": &cfg,
+		}); failed != nil {
+			err = errors.Join(libs.ErrInitFailed, failed)
+			return
+		}
+
+		apiCtx, apiCancel = context.WithCancel(ctx)
+
+		if err = api.Init(apiCtx, &cfg); err != nil {
+			return
+		}
+
+		if err = api.Connect(); err != nil {
+			return
+		}
+
+		if err = api.Login(); err != nil {
+			return
 		}
 	})
 
@@ -59,21 +79,24 @@ func Init(ctx context.Context, cfgPath string) (err error) {
 
 //export initialize
 func initialize(cfgPath *C.char) C.int {
-	ydCfg := C.GoString(cfgPath)
+	emcCfg := C.GoString(cfgPath)
 
-	if err := Init(context.Background(), ydCfg); err != nil {
+	if err := Init(context.Background(), emcCfg); err != nil {
 		slog.Error(
-			"Yd module initialize failed",
+			"Rem module initialize failed",
 			slog.Any("error", err),
 		)
+
 		return -1
 	}
 
 	return 0
 }
 
-func ReportFronts(addrs ...string) error {
-	if err := api.SelectConnections(addrs...); err != nil {
+func ReportFronts(addrList ...string) error {
+	if req, err := api.MakeSeatsPriority(addrList...); err != nil {
+		return errors.Join(libs.ErrReportFailed, err)
+	} else if api.SendMktSessPriChange(req); err != nil {
 		return errors.Join(libs.ErrReportFailed, err)
 	}
 
