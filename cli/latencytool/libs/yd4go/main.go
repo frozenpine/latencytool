@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"sync"
 	"unsafe"
@@ -58,6 +59,10 @@ func initialize(cfgPath *C.char) C.int {
 	ydCfg := C.GoString(cfgPath)
 
 	if err := Init(context.Background(), ydCfg); err != nil {
+		slog.Error(
+			"Yd module initialize failed",
+			slog.Any("error", err),
+		)
 		return -1
 	}
 
@@ -84,6 +89,10 @@ func report_fronts(ptr **C.char, len C.int) C.int {
 	}
 
 	if err := ReportFronts(addrs...); err != nil {
+		slog.Error(
+			"Yd module report fronts failed",
+			slog.Any("error", err),
+		)
 		return -2
 	}
 
@@ -104,6 +113,8 @@ func Join() error {
 }
 
 //export join
-func join() {
+func join() C.int {
 	Join()
+
+	return 0
 }
