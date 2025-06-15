@@ -1,7 +1,14 @@
 package libs
 
 /*
-#include "cplugin.h"
+#include <stdlib.h>
+#include <strings.h>
+#include <dlfcn.h>
+
+const char* INIT_FUNC_NAME = "initialize";
+const char* REPORT_FUNC_NAME = "report_fronts";
+const char* DESTORY_FUNC_NAME = "destory";
+const char* JOIN_FUNC_NAME = "join";
 */
 import "C"
 
@@ -13,10 +20,6 @@ import (
 	"runtime"
 	"sync"
 	"unsafe"
-)
-
-const (
-	DESTORY_FUNC_NAME = "DestoryInstance"
 )
 
 type CPluginLib struct {
@@ -103,10 +106,7 @@ func NewCPlugin(dir, name string) (lib *CPluginLib, err error) {
 			return
 		}
 
-		init_func_name := C.CString(INIT_FUNC_NAME)
-		defer C.free(unsafe.Pointer(init_func_name))
-
-		if init := C.dlsym(lib.plugin, init_func_name); init == nil {
+		if init := C.dlsym(lib.plugin, C.INIT_FUNC_NAME); init == nil {
 			msg := C.dlerror()
 
 			err = fmt.Errorf(
@@ -117,10 +117,7 @@ func NewCPlugin(dir, name string) (lib *CPluginLib, err error) {
 			lib.initFn = init
 		}
 
-		report_func_name := C.CString(REPORT_FUNC_NAME)
-		defer C.free(unsafe.Pointer(report_func_name))
-
-		if report := C.dlsym(lib.plugin, report_func_name); report == nil {
+		if report := C.dlsym(lib.plugin, C.REPORT_FUNC_NAME); report == nil {
 			msg := C.dlerror()
 
 			err = fmt.Errorf(
@@ -131,10 +128,7 @@ func NewCPlugin(dir, name string) (lib *CPluginLib, err error) {
 			lib.reportFn = report
 		}
 
-		destory_func_name := C.CString(DESTORY_FUNC_NAME)
-		defer C.free(unsafe.Pointer(destory_func_name))
-
-		if destory := C.dlsym(lib.plugin, destory_func_name); destory == nil {
+		if destory := C.dlsym(lib.plugin, C.DESTORY_FUNC_NAME); destory == nil {
 			msg := C.dlerror()
 
 			err = fmt.Errorf(
@@ -145,10 +139,7 @@ func NewCPlugin(dir, name string) (lib *CPluginLib, err error) {
 			lib.destoryFn = destory
 		}
 
-		join_func_name := C.CString(JOIN_FUNC_NAME)
-		defer C.free(unsafe.Pointer(join_func_name))
-
-		if join := C.dlsym(lib.plugin, join_func_name); join == nil {
+		if join := C.dlsym(lib.plugin, C.JOIN_FUNC_NAME); join == nil {
 			msg := C.dlerror()
 
 			err = fmt.Errorf(
