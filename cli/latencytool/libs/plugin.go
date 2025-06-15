@@ -36,9 +36,10 @@ type PluginLib struct {
 	unloadOnce sync.Once
 	initOnce   sync.Once
 
-	ctx      context.Context
-	cancel   context.CancelFunc
-	cfgPath  string
+	ctx     context.Context
+	cancel  context.CancelFunc
+	cfgPath string
+
 	initFn   func(context.Context, string) error
 	reportFn func(...string) error
 	joinFn   func() error
