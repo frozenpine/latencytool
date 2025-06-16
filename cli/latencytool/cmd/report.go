@@ -21,7 +21,7 @@ import (
 const PLUGIN_LIB_DIR = "libs"
 
 var (
-	pluginDir string
+	libDir string
 )
 
 type pluginCache map[string]libs.Plugin
@@ -48,9 +48,9 @@ func (p *pluginCache) Set(name string) error {
 
 	switch suffix {
 	case "plugin":
-		plugin, err = libs.NewPlugin(pluginDir, name)
+		plugin, err = libs.NewPlugin(libDir, name)
 	case "so":
-		plugin, err = libs.NewCPlugin(pluginDir, name)
+		plugin, err = libs.NewCPlugin(libDir, name)
 	default:
 		return errInvalidArgs
 	}
@@ -180,7 +180,7 @@ func init() {
 	rootCmd.AddCommand(reportCmd)
 
 	reportCmd.Flags().StringVar(
-		&pluginDir, "lib", PLUGIN_LIB_DIR, "Reporter plugin lib dir",
+		&libDir, "lib", PLUGIN_LIB_DIR, "Reporter plugin lib dir",
 	)
 	reportCmd.Flags().Var(
 		&plugins, "plugin",

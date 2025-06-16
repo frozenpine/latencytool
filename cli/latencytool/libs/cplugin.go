@@ -9,6 +9,16 @@ const char* INIT_FUNC_NAME = "initialize";
 const char* REPORT_FUNC_NAME = "report_fronts";
 const char* DESTORY_FUNC_NAME = "destory";
 const char* JOIN_FUNC_NAME = "join";
+
+typedef int (*initialize)(char*);
+typedef int (*report_fronts)(char**, int);
+typedef int (*destory)();
+typedef int (*join)();
+
+int help_init(initialize fn, char* cfg_path) { return fn(cfg_path); }
+int help_report_fronts(report_fronts fn, char** ptr, int len) { return fn(ptr, len); }
+int help_destory(destory fn) { return fn(); }
+int help_join(join fn) { return fn(); }
 */
 import "C"
 
@@ -16,6 +26,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"os"
 	"path"
 	"runtime"
 	"sync"
@@ -34,10 +46,10 @@ type CPluginLib struct {
 	cancel  context.CancelFunc
 	cfgPath string
 
-	initFn    unsafe.Pointer
-	reportFn  unsafe.Pointer
-	destoryFn unsafe.Pointer
-	joinFn    unsafe.Pointer
+	initFn    C.initialize
+	reportFn  C.report_fronts
+	destoryFn C.destory
+	joinFn    C.join
 }
 
 func (clib *CPluginLib) Init(ctx context.Context, cfgPath string) (err error) {
@@ -48,10 +60,13 @@ func (clib *CPluginLib) Init(ctx context.Context, cfgPath string) (err error) {
 
 		clib.ctx, clib.cancel = context.WithCancel(ctx)
 
-		// TODO
-		// if err = lib.initFn(lib.ctx, cfgPath); err != nil {
-		// 	return
-		// }
+		cfg_path := C.CString(cfgPath)
+		defer C.free(unsafe.Pointer(cfg_path))
+
+		if rtn := C.help_init(clib.initFn, cfg_path); rtn != 0 {
+			err = ErrInitFailed
+			return
+		}
 
 		clib.cfgPath = cfgPath
 	})
@@ -60,33 +75,66 @@ func (clib *CPluginLib) Init(ctx context.Context, cfgPath string) (err error) {
 }
 
 func (clib *CPluginLib) Stop() {
-	// TODO
+	if rtn := C.help_destory(clib.destoryFn); rtn != 0 {
+		slog.Error(
+			"call module destory failed",
+			slog.Int("rtn", int(rtn)),
+		)
+	}
 }
 
 func (clib *CPluginLib) Join() error {
-	// TODO
+	if rtn := C.help_join(clib.joinFn); rtn != 0 {
+		return ErrJoinFailed
+	}
 	return nil
 }
 
 func (clib *CPluginLib) ReportFronts(addrList ...string) error {
-	// TODO
+	arr := make([]*C.char, 0, len(addrList))
+
+	for _, addr := range addrList {
+		arr = append(arr, C.CString(addr))
+	}
+
+	defer func() {
+		for _, v := range arr {
+			C.free(unsafe.Pointer(v))
+		}
+	}()
+
+	if rtn := C.help_report_fronts(
+		clib.reportFn, &arr[0], C.int(len(addrList)),
+	); rtn != 0 {
+		return ErrReportFailed
+	}
+
 	return nil
 }
 
-func NewCPlugin(dir, name string) (lib *CPluginLib, err error) {
-	var ext string
+func NewCPlugin(dirName, libName string) (lib *CPluginLib, err error) {
+	var libPath string
+
 	switch runtime.GOOS {
 	case "linux":
-		ext = ".so"
+		libDir := path.Join(dirName, libName)
+		libPath = path.Join(libDir, libName+".so")
+
+		if err := os.Setenv("LD_LIBRARY_PATH", libDir); err != nil {
+			return nil, err
+		}
+
+		slog.Info(
+			"lib environment setted for linux",
+			slog.String("LD_LIBRARY_PATH", os.Getenv("LD_LIBRARY_PATH")),
+		)
 	case "windows":
-		ext = ".dll"
+		libPath = path.Join(
+			dirName, libName, libName+".dll",
+		)
 	default:
 		return nil, errors.New("unsupported platform")
 	}
-
-	libPath := path.Join(
-		dir, name, name+ext,
-	)
 
 	lib = &CPluginLib{
 		libPath: libPath,
@@ -114,7 +162,7 @@ func NewCPlugin(dir, name string) (lib *CPluginLib, err error) {
 			)
 			return
 		} else {
-			lib.initFn = init
+			lib.initFn = (C.initialize)(init)
 		}
 
 		if report := C.dlsym(lib.plugin, C.REPORT_FUNC_NAME); report == nil {
@@ -125,7 +173,7 @@ func NewCPlugin(dir, name string) (lib *CPluginLib, err error) {
 			)
 			return
 		} else {
-			lib.reportFn = report
+			lib.reportFn = (C.report_fronts)(report)
 		}
 
 		if destory := C.dlsym(lib.plugin, C.DESTORY_FUNC_NAME); destory == nil {
@@ -136,7 +184,7 @@ func NewCPlugin(dir, name string) (lib *CPluginLib, err error) {
 			)
 			return
 		} else {
-			lib.destoryFn = destory
+			lib.destoryFn = (C.destory)(destory)
 		}
 
 		if join := C.dlsym(lib.plugin, C.JOIN_FUNC_NAME); join == nil {
@@ -147,7 +195,7 @@ func NewCPlugin(dir, name string) (lib *CPluginLib, err error) {
 			)
 			return
 		} else {
-			lib.joinFn = join
+			lib.joinFn = (C.join)(join)
 		}
 
 		runtime.SetFinalizer(lib, func(plugin *CPluginLib) {

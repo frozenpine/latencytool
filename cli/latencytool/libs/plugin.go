@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"os"
 	"path"
 	"plugin"
 	"runtime"
@@ -75,10 +77,25 @@ func (lib *PluginLib) Join() error {
 	return lib.joinFn()
 }
 
-func NewPlugin(dir, name string) (lib *PluginLib, err error) {
-	libPath := path.Join(
-		dir, name, name+".plugin",
-	)
+func NewPlugin(dirName, libName string) (lib *PluginLib, err error) {
+	libDir := path.Join(dirName, libName)
+
+	switch runtime.GOOS {
+	case "linux":
+		if err := os.Setenv("LD_LIBRARY_PATH", libDir); err != nil {
+			return nil, err
+		}
+
+		slog.Info(
+			"lib environment setted for linux",
+			slog.String("LD_LIBRARY_PATH", os.Getenv("LD_LIBRARY_PATH")),
+		)
+	case "windows":
+	default:
+		return nil, errors.New("unsupported platform")
+	}
+
+	libPath := path.Join(libDir, libName+".plugin")
 
 	lib = &PluginLib{
 		libPath: libPath,
