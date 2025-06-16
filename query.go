@@ -315,11 +315,11 @@ func (tr TimeRange) String() string {
 
 	values := tr.GetRange()
 
-	buff.WriteString("TimeRange{")
+	buff.WriteString("TimeRange[")
 	buff.WriteString(values[0])
 	buff.WriteString(" ~ ")
 	buff.WriteString(values[1])
-	buff.WriteString("}")
+	buff.WriteString("]")
 
 	return buff.String()
 }
@@ -333,11 +333,15 @@ func (to Tick2Order) String() string {
 	buff := bytebufferpool.Get()
 	defer bytebufferpool.Put(buff)
 
-	buff.WriteString("Tick2OrderRange{")
-	buff.WriteString(strconv.Itoa(to.From / 1000000))
+	buff.WriteString("Tick2OrderRange[")
+	buff.WriteString(strconv.FormatFloat(
+		float64(to.From)/1000000.0, 'f', -1, 64,
+	))
 	buff.WriteString(" us ~ ")
-	buff.WriteString(strconv.Itoa(to.To / 1000000))
-	buff.WriteString(" us}")
+	buff.WriteString(strconv.FormatFloat(
+		float64(to.To)/1000000.0, 'f', -1, 64,
+	))
+	buff.WriteString(" us]")
 
 	return buff.String()
 }

@@ -151,6 +151,8 @@ trading systems specified by args.`,
 		if once || config.TimeRange[latency4go.TimeFrom] != "" {
 			slog.Info(
 				"args confilicted with --interval, set to onetime running",
+				slog.Bool("once", once),
+				slog.String("range", config.TimeRange.String()),
 			)
 			interval = 0
 		}
