@@ -96,7 +96,7 @@ func initialize(cfgPath *C.char) C.int {
 func ReportFronts(addrList ...string) error {
 	if req, err := api.MakeSeatsPriority(addrList...); err != nil {
 		return errors.Join(libs.ErrReportFailed, err)
-	} else if api.SendMktSessPriChange(req); err != nil {
+	} else if err = api.SendMktSessPriChange(req); err != nil {
 		return errors.Join(libs.ErrReportFailed, err)
 	}
 
