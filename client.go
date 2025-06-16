@@ -55,7 +55,8 @@ type LatencyClient struct {
 	qryInterval atomic.Pointer[time.Duration]
 	notify      chan []*exFrontLatency
 
-	sinkFile   string
+	sinkPath   string
+	lastReport []*exFrontLatency
 	reporterWg sync.WaitGroup
 	reporters  sync.Map
 }
@@ -63,7 +64,7 @@ type LatencyClient struct {
 func (c *LatencyClient) Init(
 	ctx context.Context,
 	schema, host string, port int,
-	sinkFile string, config *QueryConfig,
+	sinkPath string, config *QueryConfig,
 ) (err error) {
 	if c.client.Load() != nil {
 		return ErrAlreadyInitialized
@@ -111,9 +112,29 @@ func (c *LatencyClient) Init(
 			slog.String("version", esVersion),
 		)
 
+		if sinkPath != "" {
+			var sinkData []byte
+			if sinkData, err = os.ReadFile(sinkPath); err != nil {
+				if !errors.Is(err, os.ErrNotExist) {
+					return
+				}
+
+				err = nil
+				slog.Warn("sink file not exists, skip recover")
+			} else if err = json.Unmarshal(sinkData, &c.lastReport); err != nil {
+				return
+			} else {
+				slog.Info(
+					"stored latency recovered from file",
+					slog.String("sink_path", sinkPath),
+					slog.Any("latency", c.lastReport),
+				)
+			}
+		}
+
 		c.client.Store(client)
 		c.cfg.Store(config)
-		c.sinkFile = sinkFile
+		c.sinkPath = sinkPath
 	})
 
 	return
@@ -244,7 +265,7 @@ func (c *LatencyClient) getLatency() ([]*exFrontLatency, error) {
 }
 
 func (c *LatencyClient) sinkLatency(latency []*exFrontLatency) error {
-	if c.sinkFile == "" {
+	if c.sinkPath == "" {
 		return nil
 	}
 
@@ -254,12 +275,14 @@ func (c *LatencyClient) sinkLatency(latency []*exFrontLatency) error {
 		return nil
 	}
 
+	c.lastReport = latency
+
 	data, err := json.Marshal(latency)
 	if err != nil {
 		return err
 	}
 
-	return os.WriteFile(c.sinkFile, data, os.ModePerm)
+	return os.WriteFile(c.sinkPath, data, os.ModePerm)
 }
 
 func (c *LatencyClient) runQuerier(
@@ -267,9 +290,6 @@ func (c *LatencyClient) runQuerier(
 ) error {
 	c.runCtx, c.runCancel = context.WithCancel(c.ctx)
 	c.watchRun = make(chan error, 1)
-
-	// self log reporter
-	c.reporterWg.Add(1)
 
 	go func() {
 		defer func() {
@@ -294,6 +314,15 @@ func (c *LatencyClient) runQuerier(
 
 					c.watchRun <- err
 					return
+				}
+
+				if len(latency) < 1 && len(c.lastReport) > 0 {
+					latency = c.lastReport
+
+					slog.Warn(
+						"empty latency list queried, use last store",
+						slog.Any("last_latency", c.lastReport),
+					)
 				}
 
 				select {
@@ -336,6 +365,9 @@ func (c *LatencyClient) runQuerier(
 }
 
 func (c *LatencyClient) runReporter() {
+	// self log reporter
+	c.reporterWg.Add(1)
+
 	defer func() {
 		c.reporters.Range(func(key, value any) bool {
 			c.reporterWg.Done()

@@ -185,6 +185,9 @@ func init() {
 		"interval", 0, "Run periodically interver, 0 for onetime running",
 	)
 
+	rootCmd.PersistentFlags().String(
+		"sink", "latency.json", "Sink latency data for next cold start",
+	)
 	rootCmd.PersistentFlags().Var(
 		&config.TimeRange, "before", "Lantency doc time range before now",
 	)
