@@ -28,7 +28,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"unsafe"
@@ -117,8 +117,8 @@ func NewCPlugin(dirName, libName string) (lib *CPluginLib, err error) {
 
 	switch runtime.GOOS {
 	case "linux":
-		libDir := path.Join(dirName, libName)
-		libPath = path.Join(libDir, libName+".so")
+		libDir := filepath.Join(dirName, libName)
+		libPath = filepath.Join(libDir, libName+".so")
 
 		if err := os.Setenv("LD_LIBRARY_PATH", libDir); err != nil {
 			return nil, err
@@ -129,7 +129,7 @@ func NewCPlugin(dirName, libName string) (lib *CPluginLib, err error) {
 			slog.String("LD_LIBRARY_PATH", os.Getenv("LD_LIBRARY_PATH")),
 		)
 	case "windows":
-		libPath = path.Join(
+		libPath = filepath.Join(
 			dirName, libName, libName+".dll",
 		)
 	default:

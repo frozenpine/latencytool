@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path"
+	"path/filepath"
 	"plugin"
 	"runtime"
 	"sync"
@@ -95,7 +96,7 @@ func NewPlugin(dirName, libName string) (lib *PluginLib, err error) {
 		return nil, errors.New("unsupported platform")
 	}
 
-	libPath := path.Join(libDir, libName+".plugin")
+	libPath := filepath.Join(libDir, libName+".plugin")
 
 	lib = &PluginLib{
 		libPath: libPath,

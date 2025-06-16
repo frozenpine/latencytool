@@ -22,21 +22,45 @@ var (
 type CtlServer struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
+	cfg       CtlServerConfig
 	instance  *atomic.Pointer[latency4go.LatencyClient]
 	initOnce  sync.Once
 	startOnce sync.Once
 	stopOnce  sync.Once
-	clients   sync.Map
+	handlers  sync.Map
 	broadcast channel.MemoChannel[Message]
 }
 
+type ipcSvr struct {
+	conn string
+}
+
+type httpSvr struct {
+	conn string
+}
+
+type CtlServerConfig struct {
+	ipcConn  ipcSvr
+	httpConn httpSvr
+}
+
+func (cfg *CtlServerConfig) IPC(conn string) *CtlServerConfig {
+	// TODO conn check
+	cfg.ipcConn.conn = conn
+	return cfg
+}
+
+func (cfg *CtlServerConfig) Http(conn string) *CtlServerConfig {
+	// TODO conn check
+	cfg.httpConn.conn = conn
+	return cfg
+}
+
 func NewCtlServer(
-	ctx context.Context, instance *atomic.Pointer[latency4go.LatencyClient],
+	ctx context.Context, cfg *CtlServerConfig,
 ) (svr *CtlServer, err error) {
-	if instance == nil {
-		return nil, fmt.Errorf(
-			"%w: no latency client instance", ErrCtlServerArgs,
-		)
+	if cfg == nil {
+		return nil, ErrCtlServerArgs
 	}
 
 	if ctx == nil {
@@ -47,8 +71,7 @@ func NewCtlServer(
 
 	svr.initOnce.Do(func() {
 		svr.ctx, svr.cancel = context.WithCancel(ctx)
-
-		svr.instance = instance
+		svr.cfg = *cfg
 
 		svr.broadcast.Init(svr.ctx, "ctl", nil)
 
@@ -85,9 +108,20 @@ func NewCtlServer(
 	return
 }
 
-func (svr *CtlServer) Start() error {
+func (svr *CtlServer) Start(
+	instance *atomic.Pointer[latency4go.LatencyClient],
+) error {
+	if instance == nil {
+		return fmt.Errorf(
+			"%w: no latency client instance", ErrCtlServerArgs,
+		)
+	}
+
 	svr.startOnce.Do(func() {
+		svr.instance = instance
+
 		// TODO
+
 		go svr.runForever()
 	})
 
@@ -140,7 +174,7 @@ func (svr *CtlServer) runForever() {
 				continue
 			}
 
-			if !svr.clients.CompareAndSwap(hdl.Name(), nil, hdl) {
+			if !svr.handlers.CompareAndSwap(hdl.Name(), nil, hdl) {
 				slog.Error(
 					"client already exits",
 					slog.String("name", hdl.Name()),

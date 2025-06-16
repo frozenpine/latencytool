@@ -109,12 +109,13 @@ func (cmd *Command) Chain() ([]*Command, error) {
 
 type rtnCode int
 
-type Values map[string]json.RawMessage
+type values map[string]json.RawMessage
 
 type Result struct {
 	Rtn     rtnCode
 	Message string
-	Values  Values
+	CmdName cmd
+	Values  values
 }
 
-type BroadCast Values
+type BroadCast values
