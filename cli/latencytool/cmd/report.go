@@ -24,6 +24,13 @@ var (
 	libDir string
 )
 
+type pluginType string
+
+const (
+	Go pluginType = "golib"
+	C  pluginType = "clib"
+)
+
 type pluginCache map[string]libs.Plugin
 
 func (p *pluginCache) Set(name string) error {
@@ -32,24 +39,24 @@ func (p *pluginCache) Set(name string) error {
 	}
 
 	var (
-		suffix = "plugin"
-		plugin libs.Plugin
-		err    error
+		libType = Go
+		plugin  libs.Plugin
+		err     error
 	)
 
 	if strings.HasPrefix(name, "C.") {
-		suffix = "so"
+		libType = C
 		name = strings.TrimPrefix(name, "C.")
 	} else if strings.ToLower(runtime.GOOS) != "linux" {
 		// go plugin only supported in linux
 		// double check environment for correct plugin type
-		suffix = "so"
+		libType = C
 	}
 
-	switch suffix {
-	case "plugin":
+	switch libType {
+	case Go:
 		plugin, err = libs.NewPlugin(libDir, name)
-	case "so":
+	case C:
 		plugin, err = libs.NewCPlugin(libDir, name)
 	default:
 		return errInvalidArgs
@@ -159,7 +166,11 @@ trading systems specified by args.`,
 
 		if ins := client.Load(); ins != nil {
 			for name, plugin := range plugins {
-				ins.RegReporter(name, plugin.ReportFronts)
+				if err := ins.AddReporter(
+					name, plugin.ReportFronts,
+				); err != nil {
+					return err
+				}
 			}
 
 			if err := ins.Start(interval); err != nil {
@@ -186,7 +197,7 @@ func init() {
 	)
 	reportCmd.Flags().Var(
 		&plugins, "plugin",
-		"Reporter plugin's name, loaded from ${lib}/${plugin}/${plugin}.plugin",
+		"Reporter plugin's name, loaded from ${lib}/${plugin}/${plugin}.{ext}",
 	)
 	reportCmd.Flags().Var(
 		&configs, "config",

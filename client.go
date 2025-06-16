@@ -425,7 +425,7 @@ func (c *LatencyClient) runReporter() {
 	slog.Info("latency notify channel closed")
 }
 
-func (c *LatencyClient) RegReporter(name string, reporter Reporter) error {
+func (c *LatencyClient) AddReporter(name string, reporter Reporter) error {
 	if name == "" || reporter == nil {
 		return ErrInvalidReporter
 	}
@@ -435,6 +435,22 @@ func (c *LatencyClient) RegReporter(name string, reporter Reporter) error {
 	}
 
 	c.reporterWg.Add(1)
+
+	return nil
+}
+
+func (c *LatencyClient) DelReporter(name string) error {
+	if name == "" {
+		return ErrInvalidReporter
+	}
+
+	if reporter, exists := c.reporters.LoadAndDelete(
+		name,
+	); !exists || reporter == nil {
+		return fmt.Errorf(
+			"%w: %s reporter not exists", ErrInvalidReporter, name,
+		)
+	}
 
 	return nil
 }
