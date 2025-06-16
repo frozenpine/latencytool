@@ -186,7 +186,7 @@ func init() {
 	)
 
 	rootCmd.PersistentFlags().String(
-		"sink", "latency.json", "Sink latency data for next cold start",
+		"sink", "", "Sink latency data for next cold start",
 	)
 	rootCmd.PersistentFlags().Var(
 		&config.TimeRange, "before", "Lantency doc time range before now",
