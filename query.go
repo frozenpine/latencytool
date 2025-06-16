@@ -444,7 +444,7 @@ func (cfg *QueryConfig) makeQuery() (elastic.Query, elastic.Aggregation) {
 
 	var sortBy = DEFAULT_SORT
 	if cfg.SortBy != "" {
-		sortBy = DEFAULT_SORT
+		sortBy = cfg.SortBy
 	}
 
 	extAgg := elastic.NewExtendedStatsAggregation().Field(AGGREGATION_FIELD)
