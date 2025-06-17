@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"reflect"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,42 +24,44 @@ var (
 type CtlServer struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
-	cfg       CtlServerConfig
 	instance  *atomic.Pointer[latency4go.LatencyClient]
 	initOnce  sync.Once
 	startOnce sync.Once
 	stopOnce  sync.Once
-	handlers  sync.Map
-	broadcast channel.MemoChannel[Message]
+	handlers  []Handler
+	broadcast channel.MemoChannel[*Message]
 }
 
-type ipcSvr struct {
-	conn string
+type CtlSvrHdlConfig struct {
+	handlers []Handler
 }
 
-type httpSvr struct {
-	conn string
+func (cfg *CtlSvrHdlConfig) IPC(conn string) *CtlSvrHdlConfig {
+	if cfg == nil {
+		return nil
+	}
+
+	if ipc, err := NewIpcCtlHandler(conn); err != nil {
+		slog.Error(
+			"create ipc handler failed",
+			slog.Any("error", err),
+		)
+
+		return nil
+	} else {
+		cfg.handlers = append(cfg.handlers, ipc)
+		return cfg
+	}
 }
 
-type CtlServerConfig struct {
-	ipcConn  ipcSvr
-	httpConn httpSvr
-}
-
-func (cfg *CtlServerConfig) IPC(conn string) *CtlServerConfig {
+func (cfg *CtlSvrHdlConfig) Http(conn string) *CtlSvrHdlConfig {
 	// TODO conn check
-	cfg.ipcConn.conn = conn
-	return cfg
-}
-
-func (cfg *CtlServerConfig) Http(conn string) *CtlServerConfig {
-	// TODO conn check
-	cfg.httpConn.conn = conn
+	// cfg.httpConn.conn = conn
 	return cfg
 }
 
 func NewCtlServer(
-	ctx context.Context, cfg *CtlServerConfig,
+	ctx context.Context, cfg *CtlSvrHdlConfig,
 ) (svr *CtlServer, err error) {
 	if cfg == nil {
 		return nil, ErrCtlServerArgs
@@ -71,9 +75,40 @@ func NewCtlServer(
 
 	svr.initOnce.Do(func() {
 		svr.ctx, svr.cancel = context.WithCancel(ctx)
-		svr.cfg = *cfg
 
-		svr.broadcast.Init(svr.ctx, "ctl", nil)
+		svr.broadcast.Init(svr.ctx, "broadcast", nil)
+
+		for _, hdl := range cfg.handlers {
+			hdl.Init(svr.ctx, hdl.Name(), nil)
+
+			if err = svr.broadcast.PipelineDownStream(hdl); err != nil {
+				slog.Error(
+					"connect client's broad failed",
+					slog.Any("error", err),
+				)
+
+				hdl.Release()
+				return
+			}
+
+			svr.handlers = append(svr.handlers, hdl)
+		}
+	})
+
+	return
+}
+
+func (svr *CtlServer) Start(
+	instance *atomic.Pointer[latency4go.LatencyClient],
+) (err error) {
+	if instance == nil {
+		return fmt.Errorf(
+			"%w: no latency client instance", ErrCtlServerArgs,
+		)
+	}
+
+	svr.startOnce.Do(func() {
+		svr.instance = instance
 
 		if err = svr.instance.Load().AddReporter(
 			"ctl",
@@ -88,7 +123,7 @@ func NewCtlServer(
 						slog.Any("error", err),
 					)
 				} else {
-					if err = svr.broadcast.Publish(Message{
+					if err = svr.broadcast.Publish(&Message{
 						msgType: MsgBroadCast,
 						data:    data,
 					}, time.Second*5); err != nil {
@@ -103,45 +138,66 @@ func NewCtlServer(
 
 			return
 		}
+
+		go svr.runForever()
 	})
 
 	return
 }
 
-func (svr *CtlServer) Start(
-	instance *atomic.Pointer[latency4go.LatencyClient],
-) error {
-	if instance == nil {
-		return fmt.Errorf(
-			"%w: no latency client instance", ErrCtlServerArgs,
-		)
-	}
-
-	svr.startOnce.Do(func() {
-		svr.instance = instance
-
-		// TODO
-
-		go svr.runForever()
-	})
-
-	return nil
-}
-
 func (svr *CtlServer) Stop() {
 	svr.stopOnce.Do(func() {
-		// TODO
+		svr.broadcast.Release()
+
+		for _, hdl := range svr.handlers {
+			hdl.Release()
+		}
+
+		svr.handlers = nil
 	})
 }
 
 func (svr *CtlServer) Join() error {
-	// TODO
+	for _, hdl := range svr.handlers {
+		hdl.Join()
+	}
+
 	return nil
 }
 
-func (svr *CtlServer) accept() (Handler, error) {
-	// TODO
-	return nil, nil
+func (svr *CtlServer) read() []reflect.SelectCase {
+	cases := []reflect.SelectCase{
+		{
+			Dir:  reflect.SelectRecv,
+			Chan: reflect.ValueOf(svr.ctx.Done()),
+		},
+	}
+
+	return append(cases, latency4go.ConvertSlice(
+		svr.handlers,
+		func(hdl Handler) reflect.SelectCase {
+			return reflect.SelectCase{
+				Dir:  reflect.SelectRecv,
+				Chan: reflect.ValueOf(hdl.Commands()),
+			}
+		},
+	)...)
+}
+
+func (svr *CtlServer) execute(cmd *Command) (*Message, error) {
+	switch cmd.Name {
+	// TODO cmd execution
+	default:
+		return nil, errors.New("unsupported command")
+	}
+}
+
+func (svr *CtlServer) write(idx int, msg *Message) error {
+	if idx >= len(svr.handlers) {
+		return errors.New("handler not exists")
+	}
+
+	return svr.handlers[idx].Publish(msg, time.Second*3)
 }
 
 func (svr *CtlServer) runForever() {
@@ -150,37 +206,59 @@ func (svr *CtlServer) runForever() {
 	for {
 		select {
 		case <-svr.ctx.Done():
-			return
+			if err := svr.broadcast.Publish(&Message{
+				msgType: MsgBroadCast,
+				data:    []byte("server shutting down..."),
+			}, time.Second*3); err != nil {
+				slog.Error(
+					"broadcasting exiting message failed",
+					slog.Any("error", err),
+				)
+			}
+
+			for _, hdl := range svr.handlers {
+				hdl.Release()
+			}
 		default:
-			hdl, err := svr.accept()
+			idx, recv, ok := reflect.Select(svr.read())
 
-			if err != nil {
-				slog.Error(
-					"ctl server accept client failed",
-					slog.Any("error", err),
-				)
+			if !ok {
+				slog.Info("message chan closed", slog.Int("idx", idx))
 
-				hdl.Release()
-				continue
+				// 0索引恒为ctx.Done()
+				if idx == 0 {
+					return
+				} else {
+					svr.handlers = slices.Delete(svr.handlers, idx, idx)
+					continue
+				}
 			}
 
-			if err = svr.broadcast.PipelineDownStream(hdl); err != nil {
+			if msg, ok := recv.Interface().(*Message); ok {
+				cmd, err := msg.GetCommand()
+
+				if err != nil {
+					slog.Error(
+						"receive a not commnd message",
+						slog.Any("msg", recv.Interface()),
+					)
+				} else if rsp, err := svr.execute(cmd); err != nil {
+					slog.Error(
+						"execute command failed",
+						slog.Any("error", err),
+						slog.Any("cmd", cmd),
+					)
+				} else if err := svr.write(idx, rsp); err != nil {
+					slog.Error(
+						"write message to handler failed",
+						slog.Any("error", err),
+					)
+				}
+			} else {
 				slog.Error(
-					"connect client's broad failed",
-					slog.Any("error", err),
+					"invalid message for handling",
+					slog.Any("msg", recv.Interface()),
 				)
-
-				hdl.Release()
-				continue
-			}
-
-			if !svr.handlers.CompareAndSwap(hdl.Name(), nil, hdl) {
-				slog.Error(
-					"client already exits",
-					slog.String("name", hdl.Name()),
-				)
-
-				hdl.Release()
 			}
 		}
 	}

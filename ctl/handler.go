@@ -1,9 +1,7 @@
 package ctl
 
 import (
-	"context"
 	"fmt"
-	"sync"
 
 	"github.com/frozenpine/msgqueue/channel"
 	"github.com/frozenpine/msgqueue/core"
@@ -11,48 +9,25 @@ import (
 )
 
 type Handler interface {
-	core.Upstream[Message]
+	core.Upstream[*Message]
+	core.Producer[*Message]
+
+	Commands() <-chan *Message
 }
 
 type ctlBaseHandler struct {
-	channel.Channel[Message]
+	channel.Channel[*Message]
 
-	name      string
-	hdlCtx    context.Context
-	hdlCancel context.CancelFunc
-	initOnce  sync.Once
-	stopOnce  sync.Once
+	name     string
+	commands chan *Message
 }
 
-func (hdl *ctlBaseHandler) Init(ctx context.Context) (err error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	hdl.initOnce.Do(func() {
-		if ctx == nil {
-			ctx = context.Background()
-		}
-
-		hdl.hdlCtx, hdl.hdlCancel = context.WithCancel(ctx)
-
-		hdl.Channel.Init(hdl.hdlCtx, hdl.name, nil)
-	})
-
-	return
+func (hdl *ctlBaseHandler) Name() string {
+	return hdl.name
 }
 
-func (hdl *ctlBaseHandler) Start() error {
-	// TODO
-	return nil
-}
-
-func (hdl *ctlBaseHandler) Stop() {
-	hdl.stopOnce.Do(func() {
-		// TODO
-
-		hdl.hdlCancel()
-	})
+func (hdl *ctlBaseHandler) Commands() <-chan *Message {
+	return hdl.commands
 }
 
 func (hdl *ctlBaseHandler) Join() {

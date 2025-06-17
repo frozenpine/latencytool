@@ -404,7 +404,9 @@ func (cfg *QueryConfig) String() string {
 	buff.WriteString(strconv.Itoa(cfg.AggCount))
 	buff.WriteString(" Quantiles:")
 	buff.WriteString(fmt.Sprint(cfg.Quantile))
-	buff.WriteString("}")
+	buff.WriteString(" Priority:'")
+	buff.WriteString(cfg.SortBy)
+	buff.WriteString("'}")
 
 	return buff.String()
 }
