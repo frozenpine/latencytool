@@ -50,6 +50,8 @@ var rootCmd = &cobra.Command{
 and report to trading systems`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
+	SilenceUsage:  true,
+	SilenceErrors: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		clientConn, _ := cmd.Flags().GetString("conn")
 
