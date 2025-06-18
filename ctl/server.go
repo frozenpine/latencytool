@@ -96,21 +96,20 @@ func NewCtlServer(
 				return
 			}
 
-			hdl.Init(svr.ctx, hdl.Name())
-			hdl.Start()
+			hdl.Init(svr.ctx, hdl.Name(), hdl.Start)
 
 			slog.Info(
 				"connecting ctl handler broadcast",
 				slog.String("hdl", hdl.Name()),
 			)
-			if err = svr.broadcast.PipelineDownStream(hdl.Results()); err != nil {
+			if err = svr.broadcast.PipelineDownStream(hdl); err != nil {
 				slog.Error(
 					"connect ctl handler broadcast failed",
 					slog.Any("error", err),
 					slog.String("hdl", hdl.Name()),
 				)
 
-				hdl.Stop()
+				hdl.Release()
 				return
 			} else {
 				slog.Info(
@@ -184,7 +183,7 @@ func (svr *CtlServer) Stop() {
 		svr.broadcast.Release()
 
 		for _, hdl := range svr.handlers {
-			hdl.Stop()
+			hdl.Release()
 		}
 
 		svr.handlers = nil
@@ -192,14 +191,11 @@ func (svr *CtlServer) Stop() {
 }
 
 func (svr *CtlServer) Join() error {
-	errList := []error{}
 	for _, hdl := range svr.handlers {
-		if err := hdl.Join(); err != nil {
-			errList = append(errList, err)
-		}
+		hdl.Join()
 	}
 
-	return errors.Join(errList...)
+	return nil
 }
 
 func (svr *CtlServer) read() []reflect.SelectCase {
@@ -254,7 +250,7 @@ func (svr *CtlServer) runForever() {
 			}
 
 			for _, hdl := range svr.handlers {
-				hdl.Stop()
+				hdl.Release()
 			}
 		default:
 			idx, recv, ok := reflect.Select(svr.read())

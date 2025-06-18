@@ -20,6 +20,7 @@ import (
 
 	"github.com/frozenpine/latency4go"
 	"github.com/frozenpine/latency4go/ctl"
+	"github.com/frozenpine/msgqueue/core"
 )
 
 var (
@@ -55,15 +56,37 @@ and report to trading systems`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		clientConn, _ := cmd.Flags().GetString("conn")
 
+		var (
+			client ctl.CtlClient
+			err    error
+		)
+
 		if clientConn != "" {
-			client, err := ctl.NewCtlIPCClient(clientConn)
+			switch {
+			case strings.HasPrefix(clientConn, "ipc://"):
+				client, err = ctl.NewCtlIPCClient(
+					strings.TrimPrefix(clientConn, "ipc://"),
+				)
+			default:
+				client, err = ctl.NewCtlIPCClient(clientConn)
+			}
 
 			if err != nil {
 				return err
 			}
 
-			client.Init(cmdCtx, "ipc client", client.Start)
+			client.Init(cmdCtx, "ipc", client.Start)
 
+			_, results := client.Subscribe("ipc client", core.Quick)
+
+			for msg := range results {
+				slog.Info(
+					"message return from ctl server",
+					slog.Any("msg", msg),
+				)
+			}
+
+			client.Release()
 			client.Join()
 			return nil
 		} else {

@@ -4,15 +4,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+
+	"github.com/valyala/bytebufferpool"
 )
 
+//go:generate stringer -type messageType -linecomment
 type messageType uint8
 
 const (
-	MsgUnknown messageType = iota
-	MsgCommand
-	MsgResult
-	MsgBroadCast
+	MsgUnknown   messageType = iota // Unknown
+	MsgCommand                      // Command
+	MsgResult                       // Result
+	MsgBroadCast                    // BroadCast
 )
 
 var (
@@ -114,6 +118,21 @@ func (m *Message) GetBroadCast() (*BroadCast, error) {
 	}
 
 	return getData[BroadCast](m.data)
+}
+
+func (m *Message) String() string {
+	buff := bytebufferpool.Get()
+	defer bytebufferpool.Put(buff)
+
+	buff.WriteString("Message{MsgID:")
+	buff.WriteString(strconv.FormatUint(m.msgID, 10))
+	buff.WriteString(" MessageType:")
+	buff.WriteString(m.msgType.String())
+	buff.WriteString(" Data:")
+	buff.WriteString(string(m.data))
+	buff.WriteString("}")
+
+	return buff.String()
 }
 
 type cmd string

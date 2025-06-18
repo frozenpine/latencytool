@@ -1,7 +1,6 @@
 package ctl
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,18 +15,15 @@ import (
 )
 
 type Handler interface {
-	Init(context.Context, string)
-	Name() string
+	core.Upstream[*Message]
+	core.Producer[*Message]
+
 	Start()
-	Stop()
-	Join() error
-	Publish(*Message, time.Duration) error
 	Commands() <-chan *Message
-	Results() core.Upstream[*Message]
 }
 
 type ctlBaseHandler struct {
-	results channel.MemoChannel[*Message]
+	channel.MemoChannel[*Message]
 
 	hdlName         string
 	hdlCommands     chan *Message
@@ -39,18 +35,6 @@ func (hdl *ctlBaseHandler) Name() string {
 	return hdl.hdlName
 }
 
-func (hdl *ctlBaseHandler) Init(ctx context.Context, name string) {
-	hdl.results.Init(ctx, name, nil)
-}
-
-func (hdl *ctlBaseHandler) Publish(msg *Message, timeout time.Duration) error {
-	return hdl.results.Publish(msg, timeout)
-}
-
-func (hdl *ctlBaseHandler) Results() core.Upstream[*Message] {
-	return &hdl.results
-}
-
 func (hdl *ctlBaseHandler) baseStart() {
 	hdl.hdlCommands = make(chan *Message, 10)
 
@@ -58,7 +42,7 @@ func (hdl *ctlBaseHandler) baseStart() {
 }
 
 func (hdl *ctlBaseHandler) dispatchResults() {
-	_, results := hdl.results.Subscribe("ipc dispatcher", core.Quick)
+	_, results := hdl.MemoChannel.Subscribe("ipc dispatcher", core.Quick)
 
 	for msg := range results {
 		data, err := json.Marshal(msg)
@@ -144,17 +128,10 @@ func (hdl *ctlBaseHandler) Commands() <-chan *Message {
 	return hdl.hdlCommands
 }
 
-func (hdl *ctlBaseHandler) Join() error {
-	hdl.results.Join()
-
-	// TODO
-	return nil
-}
-
 func (hdl *ctlBaseHandler) baseRelease() {
 	close(hdl.hdlCommands)
 
-	hdl.results.Release()
+	hdl.MemoChannel.Release()
 }
 
 type CtlIPCHandler struct {
@@ -169,6 +146,7 @@ func (ipcHdl *CtlIPCHandler) Write(data []byte) (int, error) {
 	if err != nil {
 		switch ipcHdl.server.StatusCode() {
 		case ipc.NotConnected, ipc.Listening:
+			// filter out no client connection
 			return len(data), nil
 		default:
 			return 0, err
@@ -200,25 +178,29 @@ func (ipcHdl *CtlIPCHandler) Start() {
 				continue
 			}
 
-			var msg Message
-			if err := json.Unmarshal(ipcMsg.Data, &msg); err != nil {
-				slog.Error(
-					"unmarshal ipc message failed",
-					slog.Any("error", err),
-				)
-			} else {
-				ipcHdl.hdlCommandCache.Store(msg.msgID, ipcHdl)
-				select {
-				case ipcHdl.hdlCommands <- &msg:
-				case <-time.After(time.Second * 5):
-					slog.Warn("send message from IPC to ctl server timeout")
+			if ipcMsg.MsgType > 0 {
+				var msg Message
+				if err := json.Unmarshal(ipcMsg.Data, &msg); err != nil {
+					slog.Error(
+						"unmarshal ipc message failed",
+						slog.Any("error", err),
+					)
+				} else {
+					ipcHdl.hdlCommandCache.Store(msg.msgID, ipcHdl)
+					select {
+					case ipcHdl.hdlCommands <- &msg:
+					case <-time.After(time.Second * 5):
+						slog.Warn("send message from IPC to ctl server timeout")
+					}
 				}
+			} else {
+				slog.Debug("ipc message", slog.Any("ipc_msg", ipcMsg))
 			}
 		}
 	}()
 }
 
-func (ipcHdl *CtlIPCHandler) Stop() {
+func (ipcHdl *CtlIPCHandler) Release() {
 	ipcHdl.server.Close()
 	ipcHdl.svrRunning.Store(false)
 

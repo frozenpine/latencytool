@@ -12,14 +12,14 @@ import (
 )
 
 type CtlClient interface {
-	core.Downstream[*Message]
+	core.Consumer[*Message]
 
 	Start()
 	Command(*Command) error
 }
 
 type ctlBaseClient struct {
-	channel.Channel[*Message]
+	channel.MemoChannel[*Message]
 	name   string
 	cmdSeq atomic.Uint64
 }
@@ -71,20 +71,27 @@ func (client *CtlIPCClient) Start() {
 				continue
 			}
 
-			var msg Message
-			if err = json.Unmarshal(ipcMsg.Data, &msg); err != nil {
-				slog.Error(
-					"unmarshal message failed",
-					slog.Any("error", err),
+			if ipcMsg.MsgType > 0 {
+				var msg Message
+				if err = json.Unmarshal(ipcMsg.Data, &msg); err != nil {
+					slog.Error(
+						"unmarshal message failed",
+						slog.Any("error", err),
+						slog.Any("ipc_msg", ipcMsg),
+					)
+				} else if err = client.MemoChannel.Publish(
+					&msg, time.Second*5,
+				); err != nil {
+					slog.Error(
+						"publish message failed",
+						slog.Any("error", err),
+						slog.String("msg", msg.String()),
+					)
+				}
+			} else {
+				slog.Debug(
+					"ipc message",
 					slog.Any("ipc_msg", ipcMsg),
-				)
-			} else if err = client.Channel.Publish(
-				&msg, time.Second*5,
-			); err != nil {
-				slog.Error(
-					"publish message failed",
-					slog.Any("error", err),
-					slog.Any("msg", msg),
 				)
 			}
 		}
