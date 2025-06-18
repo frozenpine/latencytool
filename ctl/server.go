@@ -96,19 +96,31 @@ func NewCtlServer(
 				return
 			}
 
-			hdl.Init(svr.ctx, hdl.Name(), hdl.Start)
+			hdl.Init(svr.ctx, hdl.Name())
+			hdl.Start()
 
-			if err = svr.broadcast.PipelineDownStream(hdl); err != nil {
+			slog.Info(
+				"connecting ctl handler broadcast",
+				slog.String("hdl", hdl.Name()),
+			)
+			if err = svr.broadcast.PipelineDownStream(hdl.Results()); err != nil {
 				slog.Error(
-					"connect client's broad failed",
+					"connect ctl handler broadcast failed",
 					slog.Any("error", err),
+					slog.String("hdl", hdl.Name()),
 				)
 
-				hdl.Release()
+				hdl.Stop()
 				return
+			} else {
+				slog.Info(
+					"ctl handler broadcast connected",
+					slog.String("hdl", hdl.Name()),
+				)
 			}
 
 			svr.handlers = append(svr.handlers, hdl)
+
 		}
 	})
 
@@ -128,7 +140,7 @@ func (svr *CtlServer) Start(
 		svr.instance = instance
 
 		if err = svr.instance.Load().AddReporter(
-			"ctl",
+			"controller",
 			func(addrList ...string) error {
 				data, err := json.Marshal(map[string][]string{
 					"priorities": addrList,
@@ -145,6 +157,11 @@ func (svr *CtlServer) Start(
 						data:    data,
 					}, time.Second*5); err != nil {
 						slog.Error("ctl reporter publish priorities timeout")
+					} else {
+						slog.Debug(
+							"broadcasting priority list to ctl clients",
+							slog.Any("addresses", addrList),
+						)
 					}
 				}
 
@@ -167,7 +184,7 @@ func (svr *CtlServer) Stop() {
 		svr.broadcast.Release()
 
 		for _, hdl := range svr.handlers {
-			hdl.Release()
+			hdl.Stop()
 		}
 
 		svr.handlers = nil
@@ -175,11 +192,14 @@ func (svr *CtlServer) Stop() {
 }
 
 func (svr *CtlServer) Join() error {
+	errList := []error{}
 	for _, hdl := range svr.handlers {
-		hdl.Join()
+		if err := hdl.Join(); err != nil {
+			errList = append(errList, err)
+		}
 	}
 
-	return nil
+	return errors.Join(errList...)
 }
 
 func (svr *CtlServer) read() []reflect.SelectCase {
@@ -234,7 +254,7 @@ func (svr *CtlServer) runForever() {
 			}
 
 			for _, hdl := range svr.handlers {
-				hdl.Release()
+				hdl.Stop()
 			}
 		default:
 			idx, recv, ok := reflect.Select(svr.read())

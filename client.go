@@ -430,7 +430,12 @@ func (c *LatencyClient) AddReporter(name string, reporter Reporter) error {
 		return ErrInvalidReporter
 	}
 
-	if !c.reporters.CompareAndSwap(name, nil, reporter) {
+	if exist, loaded := c.reporters.LoadOrStore(name, reporter); loaded {
+		slog.Warn(
+			"reporter with name already exist",
+			slog.String("name", name),
+			slog.Any("reporter", exist),
+		)
 		return ErrInvalidReporter
 	}
 

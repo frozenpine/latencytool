@@ -1,6 +1,7 @@
 package ctl
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,34 +16,49 @@ import (
 )
 
 type Handler interface {
-	core.Upstream[*Message]
-	core.Producer[*Message]
-
+	Init(context.Context, string)
+	Name() string
 	Start()
+	Stop()
+	Join() error
+	Publish(*Message, time.Duration) error
 	Commands() <-chan *Message
+	Results() core.Upstream[*Message]
 }
 
 type ctlBaseHandler struct {
-	channel.Channel[*Message]
+	results channel.MemoChannel[*Message]
 
-	name         string
-	commands     chan *Message
-	connections  sync.Map
-	commandCache sync.Map
+	hdlName         string
+	hdlCommands     chan *Message
+	hdlConnections  sync.Map
+	hdlCommandCache sync.Map
 }
 
 func (hdl *ctlBaseHandler) Name() string {
-	return hdl.name
+	return hdl.hdlName
+}
+
+func (hdl *ctlBaseHandler) Init(ctx context.Context, name string) {
+	hdl.results.Init(ctx, name, nil)
+}
+
+func (hdl *ctlBaseHandler) Publish(msg *Message, timeout time.Duration) error {
+	return hdl.results.Publish(msg, timeout)
+}
+
+func (hdl *ctlBaseHandler) Results() core.Upstream[*Message] {
+	return &hdl.results
 }
 
 func (hdl *ctlBaseHandler) baseStart() {
-	hdl.commands = make(chan *Message, 10)
+	hdl.hdlCommands = make(chan *Message, 10)
 
 	go hdl.dispatchResults()
 }
 
 func (hdl *ctlBaseHandler) dispatchResults() {
-	_, results := hdl.Channel.Subscribe("ipc dispatcher", core.Quick)
+	_, results := hdl.results.Subscribe("ipc dispatcher", core.Quick)
 
 	for msg := range results {
 		data, err := json.Marshal(msg)
@@ -59,7 +75,7 @@ func (hdl *ctlBaseHandler) dispatchResults() {
 
 		switch msg.GetType() {
 		case MsgBroadCast:
-			hdl.connections.Range(func(key, value any) bool {
+			hdl.hdlConnections.Range(func(key, value any) bool {
 				wr, ok := value.(io.Writer)
 
 				if !ok {
@@ -67,7 +83,7 @@ func (hdl *ctlBaseHandler) dispatchResults() {
 						"invalid connection writer",
 						slog.Any("identity", key),
 					)
-					hdl.connections.Delete(key)
+					hdl.hdlConnections.Delete(key)
 				}
 
 				_, err := wr.Write(data)
@@ -83,7 +99,7 @@ func (hdl *ctlBaseHandler) dispatchResults() {
 				return true
 			})
 		case MsgResult:
-			if value, loaded := hdl.commandCache.LoadAndDelete(
+			if value, loaded := hdl.hdlCommandCache.LoadAndDelete(
 				msg.msgID,
 			); loaded {
 				wr, ok := value.(io.Writer)
@@ -120,24 +136,25 @@ func (hdl *ctlBaseHandler) dispatchResults() {
 
 	slog.Info(
 		"result channel closed",
-		slog.String("handler", hdl.name),
+		slog.String("handler", hdl.hdlName),
 	)
 }
 
 func (hdl *ctlBaseHandler) Commands() <-chan *Message {
-	return hdl.commands
+	return hdl.hdlCommands
 }
 
-func (hdl *ctlBaseHandler) Join() {
-	hdl.Channel.Join()
+func (hdl *ctlBaseHandler) Join() error {
+	hdl.results.Join()
 
 	// TODO
+	return nil
 }
 
 func (hdl *ctlBaseHandler) baseRelease() {
-	close(hdl.commands)
+	close(hdl.hdlCommands)
 
-	hdl.Channel.Release()
+	hdl.results.Release()
 }
 
 type CtlIPCHandler struct {
@@ -150,7 +167,12 @@ type CtlIPCHandler struct {
 func (ipcHdl *CtlIPCHandler) Write(data []byte) (int, error) {
 	err := ipcHdl.server.Write(1, data)
 	if err != nil {
-		return 0, err
+		switch ipcHdl.server.StatusCode() {
+		case ipc.NotConnected, ipc.Listening:
+			return len(data), nil
+		default:
+			return 0, err
+		}
 	} else {
 		return len(data), nil
 	}
@@ -159,7 +181,7 @@ func (ipcHdl *CtlIPCHandler) Write(data []byte) (int, error) {
 func (ipcHdl *CtlIPCHandler) Start() {
 	ipcHdl.baseStart()
 
-	ipcHdl.connections.Store("ipc client", ipcHdl)
+	ipcHdl.hdlConnections.Store("ipc client", ipcHdl)
 
 	go func() {
 		for ipcHdl.svrRunning.Load() {
@@ -185,9 +207,9 @@ func (ipcHdl *CtlIPCHandler) Start() {
 					slog.Any("error", err),
 				)
 			} else {
-				ipcHdl.commandCache.Store(msg.msgID, ipcHdl)
+				ipcHdl.hdlCommandCache.Store(msg.msgID, ipcHdl)
 				select {
-				case ipcHdl.commands <- &msg:
+				case ipcHdl.hdlCommands <- &msg:
 				case <-time.After(time.Second * 5):
 					slog.Warn("send message from IPC to ctl server timeout")
 				}
@@ -196,7 +218,7 @@ func (ipcHdl *CtlIPCHandler) Start() {
 	}()
 }
 
-func (ipcHdl *CtlIPCHandler) Release() {
+func (ipcHdl *CtlIPCHandler) Stop() {
 	ipcHdl.server.Close()
 	ipcHdl.svrRunning.Store(false)
 
@@ -204,10 +226,7 @@ func (ipcHdl *CtlIPCHandler) Release() {
 }
 
 func NewIpcCtlHandler(name string) (*CtlIPCHandler, error) {
-	svr, err := ipc.StartServer(name, &ipc.ServerConfig{
-		Encryption:        false,
-		UnmaskPermissions: true,
-	})
+	svr, err := ipc.StartServer(name, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -215,10 +234,7 @@ func NewIpcCtlHandler(name string) (*CtlIPCHandler, error) {
 	hdl := CtlIPCHandler{
 		server: svr,
 	}
-	hdl.name = fmt.Sprintf("ctl_ipc_%s", name)
-	if hdl.server, err = ipc.StartServer(name, nil); err != nil {
-		return nil, err
-	}
+	hdl.hdlName = fmt.Sprintf("ctl_ipc_%s", name)
 	hdl.svrRunning.Store(true)
 
 	return &hdl, nil
