@@ -380,7 +380,7 @@ type QueryConfig struct {
 	SortBy string
 }
 
-var DummyQueryConfig QueryConfig = QueryConfig{
+var DefaultQueryConfig QueryConfig = QueryConfig{
 	TimeRange: TimeRange{
 		TimeBefore: "5m",
 	},

@@ -1,6 +1,8 @@
 package libs
 
 /*
+#cgo LDFLAGS: -ldl
+
 #include <stdlib.h>
 #include <strings.h>
 #include <dlfcn.h>

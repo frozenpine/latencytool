@@ -204,7 +204,10 @@ func (ipcHdl *CtlIPCHandler) Release() {
 }
 
 func NewIpcCtlHandler(name string) (*CtlIPCHandler, error) {
-	svr, err := ipc.StartServer(name, nil)
+	svr, err := ipc.StartServer(name, &ipc.ServerConfig{
+		Encryption:        false,
+		UnmaskPermissions: true,
+	})
 	if err != nil {
 		return nil, err
 	}

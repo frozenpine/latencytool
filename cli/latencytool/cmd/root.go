@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"sync/atomic"
 	"syscall"
 
@@ -18,6 +19,7 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/frozenpine/latency4go"
+	"github.com/frozenpine/latency4go/ctl"
 )
 
 var (
@@ -30,8 +32,9 @@ var (
 	cmdCtx    context.Context
 	cmdCancel context.CancelFunc
 
-	client atomic.Pointer[latency4go.LatencyClient]
-	config latency4go.QueryConfig = latency4go.DummyQueryConfig
+	client     atomic.Pointer[latency4go.LatencyClient]
+	controller atomic.Pointer[ctl.CtlServer]
+	config     latency4go.QueryConfig = latency4go.DefaultQueryConfig
 )
 
 var (
@@ -47,8 +50,23 @@ var rootCmd = &cobra.Command{
 and report to trading systems`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
-	Run: func(cmd *cobra.Command, args []string) {
-		cmd.Help()
+	RunE: func(cmd *cobra.Command, args []string) error {
+		clientConn, _ := cmd.Flags().GetString("conn")
+
+		if clientConn != "" {
+			client, err := ctl.NewCtlIPCClient(clientConn)
+
+			if err != nil {
+				return err
+			}
+
+			client.Init(cmdCtx, "ipc client", client.Start)
+
+			client.Join()
+			return nil
+		} else {
+			return cmd.Help()
+		}
 	},
 	Version: fmt.Sprintf(
 		"%s, Commit: %s, Build: %s@%s",
@@ -74,11 +92,53 @@ and report to trading systems`,
 
 		client.Store(&ins)
 
+		ctlConns, _ := cmd.Flags().GetStringSlice("ctl")
+		if len(ctlConns) > 0 {
+			cfg := &ctl.CtlSvrHdlConfig{}
+			for _, conn := range ctlConns {
+				switch {
+				case strings.HasPrefix(conn, "ipc://"):
+					cfg = cfg.Ipc(conn)
+				case strings.HasPrefix(conn, "http://"):
+					cfg = cfg.Http(conn)
+				case strings.HasPrefix(conn, "tcp://"):
+					cfg = cfg.Tcp(conn)
+				default:
+					cfg = cfg.Ipc(conn)
+				}
+
+				if cfg == nil {
+					return errors.New("create ctl handler failed")
+				}
+			}
+
+			if svr, err := ctl.NewCtlServer(cmdCtx, cfg); err != nil {
+				return err
+			} else if err = svr.Start(&client); err != nil {
+				return err
+			} else {
+				controller.Store(svr)
+			}
+		} else {
+			slog.Warn("no ctl handler specified, run w/o ctl server")
+		}
+
 		return nil
 	},
 	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
 		if cmd.Name() == cmd.Root().Name() {
 			return nil
+		}
+
+		if svr := controller.Load(); svr != nil {
+			svr.Stop()
+
+			if err := svr.Join(); err != nil {
+				slog.Error(
+					"stop controller server failed",
+					slog.Any("error", err),
+				)
+			}
 		}
 
 		if ins := client.Load(); ins != nil {
@@ -222,6 +282,13 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(
 		&config.SortBy, "sort", "",
 		"Sort exchange's fronts by elastic painless",
+	)
+
+	rootCmd.PersistentFlags().StringSlice(
+		"ctl", nil, "Control service listen string",
+	)
+	rootCmd.PersistentFlags().String(
+		"conn", "", "Control service connect string",
 	)
 
 	for _, cmd := range rootCmd.Commands() {

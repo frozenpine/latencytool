@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"reflect"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,12 +37,16 @@ type CtlSvrHdlConfig struct {
 	handlers []Handler
 }
 
-func (cfg *CtlSvrHdlConfig) IPC(conn string) *CtlSvrHdlConfig {
+func (cfg *CtlSvrHdlConfig) Ipc(conn string) *CtlSvrHdlConfig {
 	if cfg == nil {
 		return nil
 	}
 
-	if ipc, err := NewIpcCtlHandler(conn); err != nil {
+	slog.Info("creating ipc ctl handler", slog.String("conn", conn))
+
+	if ipc, err := NewIpcCtlHandler(
+		strings.TrimPrefix(conn, "ipc://"),
+	); err != nil {
 		slog.Error(
 			"create ipc handler failed",
 			slog.Any("error", err),
@@ -57,7 +62,14 @@ func (cfg *CtlSvrHdlConfig) IPC(conn string) *CtlSvrHdlConfig {
 func (cfg *CtlSvrHdlConfig) Http(conn string) *CtlSvrHdlConfig {
 	// TODO conn check
 	// cfg.httpConn.conn = conn
-	return cfg
+	slog.Error("http ctl handler not implemented")
+	return nil
+}
+
+func (cfg *CtlSvrHdlConfig) Tcp(conn string) *CtlSvrHdlConfig {
+	// TODO conn check
+	slog.Error("tcp ctl handler not implemented")
+	return nil
 }
 
 func NewCtlServer(
@@ -79,6 +91,11 @@ func NewCtlServer(
 		svr.broadcast.Init(svr.ctx, "broadcast", nil)
 
 		for _, hdl := range cfg.handlers {
+			if hdl == nil {
+				err = errors.New("nil ctl handler")
+				return
+			}
+
 			hdl.Init(svr.ctx, hdl.Name(), hdl.Start)
 
 			if err = svr.broadcast.PipelineDownStream(hdl); err != nil {
