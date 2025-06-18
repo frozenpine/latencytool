@@ -79,7 +79,7 @@ func NewCtlServer(
 		svr.broadcast.Init(svr.ctx, "broadcast", nil)
 
 		for _, hdl := range cfg.handlers {
-			hdl.Init(svr.ctx, hdl.Name(), nil)
+			hdl.Init(svr.ctx, hdl.Name(), hdl.Start)
 
 			if err = svr.broadcast.PipelineDownStream(hdl); err != nil {
 				slog.Error(

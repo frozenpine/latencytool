@@ -38,6 +38,36 @@ type Message struct {
 	data    []byte
 }
 
+func (m *Message) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&struct {
+		MsgID   uint64
+		MsgType messageType
+		Data    []byte
+	}{
+		MsgID:   m.msgID,
+		MsgType: m.msgType,
+		Data:    m.data,
+	})
+}
+
+func (m *Message) UnmarshalJSON(v []byte) error {
+	var d struct {
+		MsgID   uint64
+		MsgType messageType
+		Data    []byte
+	}
+
+	if err := json.Unmarshal(v, &d); err != nil {
+		return err
+	}
+
+	m.msgID = d.MsgID
+	m.msgType = d.MsgType
+	m.data = d.Data
+
+	return nil
+}
+
 func (m *Message) GetType() messageType {
 	if m == nil {
 		return MsgUnknown
