@@ -64,11 +64,15 @@ and report to trading systems`,
 		if clientConn != "" {
 			switch {
 			case strings.HasPrefix(clientConn, "ipc://"):
-				client, err = ctl.NewCtlIPCClient(
+				client, err = ctl.NewCtlIpcClient(
 					strings.TrimPrefix(clientConn, "ipc://"),
 				)
+			case strings.HasPrefix(clientConn, "tcp://"):
+				client, err = ctl.NewCtlTcpClient(
+					strings.TrimPrefix(clientConn, "tcp://"),
+				)
 			default:
-				client, err = ctl.NewCtlIPCClient(clientConn)
+				client, err = ctl.NewCtlIpcClient(clientConn)
 			}
 
 			if err != nil {
@@ -124,8 +128,6 @@ and report to trading systems`,
 				switch {
 				case strings.HasPrefix(conn, "ipc://"):
 					cfg = cfg.Ipc(conn)
-				case strings.HasPrefix(conn, "http://"):
-					cfg = cfg.Http(conn)
 				case strings.HasPrefix(conn, "tcp://"):
 					cfg = cfg.Tcp(conn)
 				default:

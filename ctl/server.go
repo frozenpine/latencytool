@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"reflect"
 	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -31,45 +30,6 @@ type CtlServer struct {
 	stopOnce  sync.Once
 	handlers  []Handler
 	broadcast channel.MemoChannel[*Message]
-}
-
-type CtlSvrHdlConfig struct {
-	handlers []Handler
-}
-
-func (cfg *CtlSvrHdlConfig) Ipc(conn string) *CtlSvrHdlConfig {
-	if cfg == nil {
-		return nil
-	}
-
-	slog.Info("creating ipc ctl handler", slog.String("conn", conn))
-
-	if ipc, err := NewIpcCtlHandler(
-		strings.TrimPrefix(conn, "ipc://"),
-	); err != nil {
-		slog.Error(
-			"create ipc handler failed",
-			slog.Any("error", err),
-		)
-
-		return nil
-	} else {
-		cfg.handlers = append(cfg.handlers, ipc)
-		return cfg
-	}
-}
-
-func (cfg *CtlSvrHdlConfig) Http(conn string) *CtlSvrHdlConfig {
-	// TODO conn check
-	// cfg.httpConn.conn = conn
-	slog.Error("http ctl handler not implemented")
-	return nil
-}
-
-func (cfg *CtlSvrHdlConfig) Tcp(conn string) *CtlSvrHdlConfig {
-	// TODO conn check
-	slog.Error("tcp ctl handler not implemented")
-	return nil
 }
 
 func NewCtlServer(
