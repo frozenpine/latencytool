@@ -64,6 +64,14 @@ func (client *CtlIpcClient) Start() {
 
 		slog.Info("ipc channel closed")
 	}()
+
+	if err := client.Command(&Command{
+		Name: "state",
+	}); err != nil {
+		slog.Error("make initial start command failed")
+	} else {
+		slog.Info("initial command sended")
+	}
 }
 
 func (client *CtlIpcClient) Command(cmd *Command) error {
