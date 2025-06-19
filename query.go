@@ -485,3 +485,65 @@ func (cfg *QueryConfig) makeQuery() (elastic.Query, elastic.Aggregation) {
 
 	return boolFilter, frontTerms
 }
+
+func (cfg *QueryConfig) SetConfig(key, value string) error {
+	switch strings.ToLower(key) {
+	case "before", "range":
+		cfg.TimeRange.Set(value)
+	case "from":
+		if v, err := strconv.Atoi(value); err != nil {
+			return err
+		} else {
+			cfg.Tick2Order.From = v
+		}
+	case "to":
+		if v, err := strconv.Atoi(value); err != nil {
+			return err
+		} else {
+			cfg.Tick2Order.To = v
+		}
+	case "percents":
+		values := []float64{}
+
+		for _, v := range strings.Split(
+			strings.TrimSuffix(
+				strings.TrimPrefix(value, "["), "]",
+			), ",",
+		) {
+			f, err := strconv.ParseFloat(v, 64)
+			if err != nil {
+				return err
+			}
+
+			values = append(values, f)
+		}
+
+		cfg.Quantile = append(Quantile{}, values...)
+	case "agg":
+		if v, err := strconv.Atoi(value); err != nil {
+			return err
+		} else {
+			cfg.AggSize = v
+		}
+	case "least":
+		if v, err := strconv.Atoi(value); err != nil {
+			return err
+		} else {
+			cfg.AggCount = v
+		}
+	case "user":
+		cfg.Users = ConvertSlice(strings.Split(
+			strings.TrimSuffix(
+				strings.TrimPrefix(value, "["), "]",
+			), ",",
+		), func(v string) string {
+			return strings.TrimSpace(v)
+		})
+	case "sort":
+		cfg.SortBy = value
+	default:
+		return errors.New("unsupported config key")
+	}
+
+	return nil
+}

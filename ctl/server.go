@@ -200,6 +200,22 @@ func (svr *CtlServer) execute(msgID uint64, cmd *Command) (*Message, error) {
 			msgType: MsgResult,
 			data:    data,
 		}, nil
+	case "config":
+		if err := svr.instance.Load().SetConfig(cmd.KwArgs); err != nil {
+			return nil, err
+		}
+
+		cfg := svr.instance.Load().GetConfig()
+		data, err := json.Marshal(cfg)
+		if err != nil {
+			return nil, err
+		}
+
+		return &Message{
+			msgID:   msgID,
+			msgType: MsgResult,
+			data:    data,
+		}, nil
 	// TODO cmd execution
 	default:
 		return nil, errors.New("unsupported command")

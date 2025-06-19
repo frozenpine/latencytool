@@ -121,7 +121,9 @@ func (c *LatencyClient) Init(
 
 				err = nil
 				slog.Warn("sink file not exists, skip recover")
-			} else if err = json.Unmarshal(sinkData, &c.lastReport); err != nil {
+			} else if err = json.Unmarshal(
+				sinkData, c.lastReport.Load(),
+			); err != nil {
 				return
 			} else {
 				slog.Info(
@@ -148,7 +150,7 @@ func (c *LatencyClient) GetVersion() (string, error) {
 	return "", ErrNotInitialized
 }
 
-func (c *LatencyClient) getLatency() ([]*ExFrontLatency, error) {
+func (c *LatencyClient) queryLatency() ([]*ExFrontLatency, error) {
 	cfg := c.cfg.Load()
 	if cfg == nil {
 		return nil, ErrInvalidQueryCfg
@@ -308,7 +310,7 @@ func (c *LatencyClient) runQuerier(
 				c.cancelRun("current query context done")
 				return
 			default:
-				latency, err := c.getLatency()
+				latency, err := c.queryLatency()
 
 				if err != nil {
 					slog.Error(
@@ -462,6 +464,26 @@ func (c *LatencyClient) DelReporter(name string) error {
 	}
 
 	return nil
+}
+
+func (c *LatencyClient) SetConfig(data map[string]string) error {
+	if len(data) <= 0 {
+		return errors.New("empty config data")
+	}
+
+	tmpCfg := *c.cfg.Load()
+	for k, v := range data {
+		if err := tmpCfg.SetConfig(k, v); err != nil {
+			return err
+		}
+	}
+
+	c.cfg.Store(&tmpCfg)
+	return nil
+}
+
+func (c *LatencyClient) GetConfig() QueryConfig {
+	return *c.cfg.Load()
 }
 
 func (c *LatencyClient) Start(interval time.Duration) (err error) {
