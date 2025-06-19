@@ -53,10 +53,10 @@ type LatencyClient struct {
 	watchRun    chan error
 	cfg         atomic.Pointer[QueryConfig]
 	qryInterval atomic.Pointer[time.Duration]
-	notify      chan []*exFrontLatency
+	notify      chan []*ExFrontLatency
 
 	sinkPath   string
-	lastReport []*exFrontLatency
+	lastReport atomic.Pointer[[]*ExFrontLatency]
 	reporterWg sync.WaitGroup
 	reporters  sync.Map
 }
@@ -127,7 +127,7 @@ func (c *LatencyClient) Init(
 				slog.Info(
 					"stored latency recovered from file",
 					slog.String("sink_path", sinkPath),
-					slog.Any("latency", c.lastReport),
+					slog.Any("latency", c.lastReport.Load()),
 				)
 			}
 		}
@@ -148,7 +148,7 @@ func (c *LatencyClient) GetVersion() (string, error) {
 	return "", ErrNotInitialized
 }
 
-func (c *LatencyClient) getLatency() ([]*exFrontLatency, error) {
+func (c *LatencyClient) getLatency() ([]*ExFrontLatency, error) {
 	cfg := c.cfg.Load()
 	if cfg == nil {
 		return nil, ErrInvalidQueryCfg
@@ -191,7 +191,7 @@ func (c *LatencyClient) getLatency() ([]*exFrontLatency, error) {
 		return nil, fmt.Errorf("%w: get terms failed", ErrParseAggResult)
 	}
 
-	latencyList := []*exFrontLatency{}
+	latencyList := []*ExFrontLatency{}
 
 	for _, r := range termResults.Buckets {
 		front, ok := r.Key.(string)
@@ -222,7 +222,7 @@ func (c *LatencyClient) getLatency() ([]*exFrontLatency, error) {
 			)
 		}
 
-		latency := exFrontLatency{
+		latency := ExFrontLatency{
 			FrontAddr:    front,
 			Priority:     *pri.Value,
 			MaxLatency:   *extra.Max,
@@ -249,7 +249,7 @@ func (c *LatencyClient) getLatency() ([]*exFrontLatency, error) {
 		latencyList = append(latencyList, &latency)
 	}
 
-	slices.SortFunc(latencyList, func(l, r *exFrontLatency) int {
+	slices.SortFunc(latencyList, func(l, r *ExFrontLatency) int {
 		return cmp.Compare(l.Priority, r.Priority)
 	})
 
@@ -264,18 +264,22 @@ func (c *LatencyClient) getLatency() ([]*exFrontLatency, error) {
 	return latencyList, nil
 }
 
-func (c *LatencyClient) sinkLatency(latency []*exFrontLatency) error {
-	if c.sinkPath == "" {
-		return nil
-	}
+func (c *LatencyClient) GetLastState() *State {
+	return NewState(c.cfg.Load(), *c.lastReport.Load())
+}
 
+func (c *LatencyClient) sinkLatency(latency []*ExFrontLatency) error {
 	if len(latency) <= 0 {
 		slog.Debug("empty latency result, skip sink")
 
 		return nil
 	}
 
-	c.lastReport = latency
+	c.lastReport.Store(&latency)
+
+	if c.sinkPath == "" {
+		return nil
+	}
 
 	data, err := json.Marshal(latency)
 	if err != nil {
@@ -316,12 +320,12 @@ func (c *LatencyClient) runQuerier(
 					return
 				}
 
-				if len(latency) < 1 && len(c.lastReport) > 0 {
-					latency = c.lastReport
+				if len(latency) < 1 && len(*c.lastReport.Load()) > 0 {
+					latency = *c.lastReport.Load()
 
 					slog.Warn(
 						"empty latency list queried, use last store",
-						slog.Any("last_latency", c.lastReport),
+						slog.Any("last_latency", latency),
 					)
 				}
 
@@ -380,7 +384,7 @@ func (c *LatencyClient) runReporter() {
 	}()
 
 	for latency := range c.notify {
-		addrList := ConvertSlice(latency, func(v *exFrontLatency) string {
+		addrList := ConvertSlice(latency, func(v *ExFrontLatency) string {
 			return v.FrontAddr
 		})
 
@@ -477,7 +481,7 @@ func (c *LatencyClient) Start(interval time.Duration) (err error) {
 			slog.Info("onetime running latency client")
 		}
 
-		c.notify = make(chan []*exFrontLatency, 10)
+		c.notify = make(chan []*ExFrontLatency, 10)
 
 		if err = c.runQuerier(time.Second * 5); err != nil {
 			return

@@ -17,8 +17,10 @@ type CtlTcpHandler struct {
 }
 
 type tcpMsgWriter struct {
-	conn net.Conn
-	mask uint64
+	hdl      *CtlTcpHandler
+	conn     net.Conn
+	identity string
+	mask     uint64
 }
 
 func (wr *tcpMsgWriter) Write(msg *Message) error {
@@ -34,21 +36,35 @@ func (wr *tcpMsgWriter) Write(msg *Message) error {
 	buff := make([]byte, len(data)+1)
 	buff[copy(buff, data)] = '\n'
 
-	_, err = wr.conn.Write(buff)
-	return err
+	if _, err = wr.conn.Write(buff); err != nil {
+		wr.hdl.hdlConnections.Delete(wr.identity)
+		return err
+	}
+
+	return nil
 }
 
 func (tcpHdl *CtlTcpHandler) handleConn(conn net.Conn) {
 	remote := conn.RemoteAddr().(*net.TCPAddr)
 	remoteIdt := remote.String()
 	remoteIP := remote.IP.To4()
-	remotePort := uint16(remote.Port)
+	remotePort := uint64(remote.Port)
 
 	mask := uint64(binary.LittleEndian.Uint32(remoteIP))<<32 |
-		uint64(remotePort)<<16
+		remotePort<<16
+
+	slog.Info(
+		"tcp ctl client connected",
+		slog.String("remote", remoteIdt),
+	)
 
 	rd := bufio.NewScanner(conn)
-	wr := &tcpMsgWriter{conn: conn, mask: mask}
+	wr := &tcpMsgWriter{
+		hdl:      tcpHdl,
+		conn:     conn,
+		identity: remoteIdt,
+		mask:     mask,
+	}
 
 	tcpHdl.hdlConnections.Store(remoteIdt, wr)
 
@@ -78,6 +94,11 @@ func (tcpHdl *CtlTcpHandler) handleConn(conn net.Conn) {
 			}
 		}
 	}
+
+	slog.Info(
+		"tcp ctl client read exit",
+		slog.String("remote", remoteIdt),
+	)
 }
 
 func (tcpHdl *CtlTcpHandler) Start() {

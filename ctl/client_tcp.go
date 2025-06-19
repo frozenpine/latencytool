@@ -42,6 +42,14 @@ func (c *CtlTcpClient) recv() {
 
 func (c *CtlTcpClient) Start() {
 	go c.recv()
+
+	if err := c.Command(&Command{
+		Name: "state",
+	}); err != nil {
+		slog.Error("make initial start command failed")
+	} else {
+		slog.Info("initial command sended")
+	}
 }
 
 func (c *CtlTcpClient) Command(cmd *Command) error {
@@ -54,7 +62,7 @@ func (c *CtlTcpClient) Command(cmd *Command) error {
 		return err
 	}
 
-	_, err = c.conn.Write(data)
+	_, err = c.conn.Write(append(data, '\n'))
 	return err
 }
 

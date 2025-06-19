@@ -86,6 +86,10 @@ func NewCtlServer(
 	return
 }
 
+func (svr *CtlServer) GetLatestState() *latency4go.State {
+	return svr.instance.Load().GetLastState()
+}
+
 func (svr *CtlServer) Start(
 	instance *atomic.Pointer[latency4go.LatencyClient],
 ) (err error) {
@@ -177,8 +181,25 @@ func (svr *CtlServer) read() []reflect.SelectCase {
 	)...)
 }
 
-func (svr *CtlServer) execute(cmd *Command) (*Message, error) {
+func (svr *CtlServer) execute(msgID uint64, cmd *Command) (*Message, error) {
+	slog.Info(
+		"ctl server executing command",
+		slog.Any("cmd", cmd),
+	)
 	switch cmd.Name {
+	case "state":
+		state := svr.instance.Load().GetLastState()
+		data, err := json.Marshal(state)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return &Message{
+			msgID:   msgID,
+			msgType: MsgResult,
+			data:    data,
+		}, nil
 	// TODO cmd execution
 	default:
 		return nil, errors.New("unsupported command")
@@ -186,11 +207,11 @@ func (svr *CtlServer) execute(cmd *Command) (*Message, error) {
 }
 
 func (svr *CtlServer) write(idx int, msg *Message) error {
-	if idx >= len(svr.handlers) {
+	if idx > len(svr.handlers) {
 		return errors.New("handler not exists")
 	}
 
-	return svr.handlers[idx].Publish(msg, time.Second*3)
+	return svr.handlers[idx-1].Publish(msg, time.Second*3)
 }
 
 func (svr *CtlServer) runForever() {
@@ -227,6 +248,12 @@ func (svr *CtlServer) runForever() {
 				}
 			}
 
+			slog.Debug(
+				"message received from handler",
+				slog.Int("idx", idx),
+				slog.Any("value", recv),
+			)
+
 			if msg, ok := recv.Interface().(*Message); ok {
 				cmd, err := msg.GetCommand()
 
@@ -235,7 +262,7 @@ func (svr *CtlServer) runForever() {
 						"receive a not commnd message",
 						slog.Any("msg", recv.Interface()),
 					)
-				} else if rsp, err := svr.execute(cmd); err != nil {
+				} else if rsp, err := svr.execute(msg.msgID, cmd); err != nil {
 					slog.Error(
 						"execute command failed",
 						slog.Any("error", err),

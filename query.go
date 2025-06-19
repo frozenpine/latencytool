@@ -85,7 +85,7 @@ func (p percentResults) String() string {
 	return buff.String()
 }
 
-type exFrontLatency struct {
+type ExFrontLatency struct {
 	FrontAddr          string
 	MaxLatency         float64
 	MinLatency         float64
@@ -98,7 +98,7 @@ type exFrontLatency struct {
 	DocCount           int64
 }
 
-func (l *exFrontLatency) UnmarshalJSON(data []byte) error {
+func (l *ExFrontLatency) UnmarshalJSON(data []byte) error {
 	values := make(map[string]json.RawMessage)
 
 	if err := json.Unmarshal(data, &values); err != nil {
@@ -164,7 +164,7 @@ func (l *exFrontLatency) UnmarshalJSON(data []byte) error {
 	return json.Unmarshal(values["Percents"], &l.Percents)
 }
 
-func (l exFrontLatency) String() string {
+func (l ExFrontLatency) String() string {
 	buff := bytebufferpool.Get()
 	defer bytebufferpool.Put(buff)
 
