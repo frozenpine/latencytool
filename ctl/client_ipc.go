@@ -12,6 +12,7 @@ type CtlIpcClient struct {
 	ctlBaseClient
 
 	ipcClient *ipc.Client
+	waitConn  chan struct{}
 }
 
 func (client *CtlIpcClient) Start() {
@@ -59,6 +60,11 @@ func (client *CtlIpcClient) Start() {
 					"ipc message",
 					slog.Any("ipc_msg", ipcMsg),
 				)
+
+				switch client.ipcClient.StatusCode() {
+				case ipc.Connected:
+					close(client.waitConn)
+				}
 			}
 		}
 
@@ -68,13 +74,15 @@ func (client *CtlIpcClient) Start() {
 	if err := client.Command(&Command{
 		Name: "state",
 	}); err != nil {
-		slog.Error("make initial start command failed")
+		slog.Error("make initial start command failed", slog.Any("error", err))
 	} else {
 		slog.Info("initial command sended")
 	}
 }
 
 func (client *CtlIpcClient) Command(cmd *Command) error {
+	<-client.waitConn
+
 	msg, err := client.createCmdMessage(cmd)
 	if err != nil {
 		return err
@@ -107,6 +115,7 @@ func NewCtlIpcClient(conn string) (*CtlIpcClient, error) {
 		},
 
 		ipcClient: client,
+		waitConn:  make(chan struct{}),
 	}
 
 	return instance, nil

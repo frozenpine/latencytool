@@ -46,7 +46,7 @@ func (c *CtlTcpClient) Start() {
 	if err := c.Command(&Command{
 		Name: "state",
 	}); err != nil {
-		slog.Error("make initial start command failed")
+		slog.Error("make initial start command failed", slog.Any("error", err))
 	} else {
 		slog.Info("initial command sended")
 	}
