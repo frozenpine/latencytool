@@ -12,6 +12,11 @@ var (
 	running atomic.Bool
 )
 
+func StartTui() error {
+	// TODO
+	return nil
+}
+
 func init() {
 	MainLayout.SetFullScreen(true).SetDirection(
 		tview.FlexRow,

@@ -54,8 +54,13 @@ and report to trading systems`,
 	// has an action associated with it:
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	Version: fmt.Sprintf(
+		"%s, Commit: %s, Build: %s@%s",
+		version, gitVersion, buildTime, goVersion,
+	),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		clientConn, _ := cmd.Flags().GetString("conn")
+		useTui, _ := cmd.Flags().GetBool("tui")
 
 		var (
 			client ctl.CtlClient
@@ -80,9 +85,15 @@ and report to trading systems`,
 				return err
 			}
 
-			client.Init(cmdCtx, "ipc", client.Start)
+			if useTui {
+				if err := tui.StartTui(); err != nil {
+					return err
+				}
+			}
 
-			_, results := client.Subscribe("ipc client", core.Quick)
+			client.Init(cmdCtx, "ctl client", client.Start)
+
+			_, results := client.Subscribe("ctl client", core.Quick)
 
 			for msg := range results {
 				slog.Info(
@@ -98,10 +109,6 @@ and report to trading systems`,
 			return cmd.Help()
 		}
 	},
-	Version: fmt.Sprintf(
-		"%s, Commit: %s, Build: %s@%s",
-		version, gitVersion, buildTime, goVersion,
-	),
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if cmd.Name() == cmd.Root().Name() {
 			return nil
@@ -331,6 +338,9 @@ func init() {
 	)
 	rootCmd.Flags().String(
 		"conn", "", "Control service connect string",
+	)
+	rootCmd.Flags().Bool(
+		"tui", false, "Use TUI for ctl client console",
 	)
 
 	for _, cmd := range rootCmd.Commands() {
