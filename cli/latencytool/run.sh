@@ -10,13 +10,16 @@ RUN_LOG="${LOG_DIR}/run.log"
 # rotate size in MB
 LOG_ROTATE=500
 LOG_KEEP=5
+REM_CONFIG="${BASE_DIR}/rem4go.toml"
+YD_CONFIG="${BASE_DIR}/config.ini"
 RUN_INTERVAL="5m"
-BEFORE_DUR="1d/d"
+BEFORE_DUR="3m"
 LATENCY_FILE="${BASE_DIR}/latency.json"
 
 COMMAND="report"
-
-declare -a ARGS=("--log" "${LOG_FILE}" "--interval" "${RUN_INTERVAL}" "--before" "${BEFORE_DUR}" "--sink" "${LATENCY_FILE}")
+declare -a CTL_ARGS=("--ctl" "ipc://latencytool" "--ctl" "tcp://127.0.0.1:45678" "--log" "${LOG_FILE}")
+declare -a LATENCY_ARGS=("--interval" "${RUN_INTERVAL}" "--before" "${BEFORE_DUR}" "--sink" "${LATENCY_FILE}")
+declare -a PLUGIN_ARGS=("--plugin" "rem4go" "--config" "rem4go=${REM_CONFIG}" "--plugin" "yd4go" "--config" "yd4go=${YD_CONFIG}")
 
 KILL="/usr/bin/kill"
 _KILL0=(${KILL} "-0")
@@ -91,10 +94,10 @@ function _start() {
         _execute="${BASE_DIR}/bin/${APP}"
     fi
 
-    echo "Running args: ${_execute} ${COMMAND} ${ARGS[@]}" >"${RUN_LOG}"
+    echo "Running args: ${_execute} ${CTL_ARGS[@]} ${COMMAND} ${LATENCY_ARGS[@]} ${PLUGIN_ARGS[@]}" >"${RUN_LOG}"
 
-    LD_LIBRARY_PATH="${BASE_DIR}" \
-        "${NOHUP}" "${_execute}" ${COMMAND} ${ARGS[@]} >> "${RUN_LOG}" &
+    LD_LIBRARY_PATH="${BASE_DIR}/libs" \
+        "${NOHUP}" "${_execute}" ${CTL_ARGS[@]} ${COMMAND} ${LATENCY_ARGS[@]} ${PLUGIN_ARGS[@]} >> "${RUN_LOG}" &
 
     sleep 3
 
