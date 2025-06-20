@@ -104,14 +104,12 @@ func (svr *CtlServer) Start(
 
 		if err = svr.instance.Load().AddReporter(
 			"controller",
-			func(addrList ...string) error {
-				data, err := json.Marshal(map[string][]string{
-					"priorities": addrList,
-				})
+			func(state *latency4go.State) error {
+				data, err := json.Marshal(state)
 
 				if err != nil {
 					slog.Error(
-						"ctl reporter marshal addr list failed",
+						"ctl reporter marshal state failed",
 						slog.Any("error", err),
 					)
 				} else {
@@ -122,8 +120,8 @@ func (svr *CtlServer) Start(
 						slog.Error("ctl reporter publish priorities timeout")
 					} else {
 						slog.Debug(
-							"broadcasting priority list to ctl clients",
-							slog.Any("addresses", addrList),
+							"broadcasting state to ctl clients",
+							slog.Any("state", state),
 						)
 					}
 				}

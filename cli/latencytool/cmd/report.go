@@ -167,7 +167,9 @@ trading systems specified by args.`,
 		if ins := client.Load(); ins != nil {
 			for name, plugin := range plugins {
 				if err := ins.AddReporter(
-					name, plugin.ReportFronts,
+					name, func(s *latency4go.State) error {
+						return plugin.ReportFronts(s.AddrList...)
+					},
 				); err != nil {
 					return err
 				}

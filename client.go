@@ -36,7 +36,7 @@ const (
 	ELASTIC_DOCUMENTS = "alldelaystatistics202*"
 )
 
-type Reporter func(addrList ...string) error
+type Reporter func(*State) error
 
 type LatencyClient struct {
 	ctx      context.Context
@@ -53,7 +53,7 @@ type LatencyClient struct {
 	watchRun    chan error
 	cfg         atomic.Pointer[QueryConfig]
 	qryInterval atomic.Pointer[time.Duration]
-	notify      chan []*ExFrontLatency
+	notify      chan struct{}
 
 	sinkPath   string
 	lastReport atomic.Pointer[[]*ExFrontLatency]
@@ -272,7 +272,7 @@ func (c *LatencyClient) GetLastState() *State {
 
 func (c *LatencyClient) sinkLatency(latency []*ExFrontLatency) error {
 	if len(latency) <= 0 {
-		slog.Debug("empty latency result, skip sink")
+		slog.Warn("empty latency result, skip sink")
 
 		return nil
 	}
@@ -322,23 +322,15 @@ func (c *LatencyClient) runQuerier(
 					return
 				}
 
-				if len(latency) < 1 && len(*c.lastReport.Load()) > 0 {
-					latency = *c.lastReport.Load()
-
-					slog.Warn(
-						"empty latency list queried, use last store",
-						slog.Any("last_latency", latency),
+				if err := c.sinkLatency(latency); err != nil {
+					slog.Error(
+						"sink latency list failed",
+						slog.Any("error", err),
 					)
 				}
 
 				select {
-				case c.notify <- latency:
-					if err := c.sinkLatency(latency); err != nil {
-						slog.Error(
-							"sink latency list failed",
-							slog.Any("error", err),
-						)
-					}
+				case c.notify <- struct{}{}:
 				case <-time.After(timeout):
 					slog.Error(
 						"publish latency timedout",
@@ -385,15 +377,8 @@ func (c *LatencyClient) runReporter() {
 		slog.Info("all reporters exitted")
 	}()
 
-	for latency := range c.notify {
-		addrList := ConvertSlice(latency, func(v *ExFrontLatency) string {
-			return v.FrontAddr
-		})
-
-		slog.Info(
-			"reporting latency",
-			slog.Any("priority", addrList),
-		)
+	for range c.notify {
+		state := c.GetLastState()
 
 		c.reporters.Range(func(key, value any) bool {
 			name, ok := key.(string)
@@ -417,7 +402,7 @@ func (c *LatencyClient) runReporter() {
 				slog.String("reporter", name),
 			)
 
-			if err := reportFn(addrList...); err != nil {
+			if err := reportFn(state); err != nil {
 				slog.Error(
 					"send latency results to reporter failed",
 					slog.String("reporter", name),
@@ -503,7 +488,7 @@ func (c *LatencyClient) Start(interval time.Duration) (err error) {
 			slog.Info("onetime running latency client")
 		}
 
-		c.notify = make(chan []*ExFrontLatency, 10)
+		c.notify = make(chan struct{}, 10)
 
 		if err = c.runQuerier(time.Second * 5); err != nil {
 			return
