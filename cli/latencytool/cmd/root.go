@@ -19,6 +19,7 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/frozenpine/latency4go"
+	"github.com/frozenpine/latency4go/cli/latencytool/tui"
 	"github.com/frozenpine/latency4go/ctl"
 	"github.com/frozenpine/msgqueue/core"
 )
@@ -106,6 +107,8 @@ and report to trading systems`,
 			return nil
 		}
 
+		slog.Info("pre run initiating latency client")
+
 		schema, _ := cmd.Flags().GetString("schema")
 		host, _ := cmd.Flags().GetString("host")
 		port, _ := cmd.Flags().GetInt("port")
@@ -150,12 +153,15 @@ and report to trading systems`,
 			slog.Warn("no ctl handler specified, run w/o ctl server")
 		}
 
+		slog.Info("pre run latency client initiated")
 		return nil
 	},
 	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
 		if cmd.Name() == cmd.Root().Name() {
 			return nil
 		}
+
+		slog.Info("post run cleanning resources")
 
 		if svr := controller.Load(); svr != nil {
 			svr.Stop()
@@ -165,13 +171,20 @@ and report to trading systems`,
 					"stop controller server failed",
 					slog.Any("error", err),
 				)
+			} else {
+				slog.Info("ctl server stopped")
 			}
 		}
 
 		if ins := client.Load(); ins != nil {
 			ins.Stop()
 
-			return ins.Join()
+			if err := ins.Join(); err != nil {
+				return err
+			}
+
+			slog.Info("latency client stopped")
+			return nil
 		} else {
 			return errInvalidInstance
 		}
@@ -217,9 +230,9 @@ func initLog() {
 			panic(err)
 		}
 
-		logWr = io.MultiWriter(logWr, os.Stderr)
+		logWr = io.MultiWriter(logWr, tui.LogWriter())
 	} else {
-		logWr = os.Stderr
+		logWr = tui.LogWriter()
 	}
 
 	if verbose > 0 {
@@ -233,6 +246,8 @@ func initLog() {
 			Level:     level,
 		},
 	)))
+
+	slog.Debug("logger initiated")
 }
 
 func init() {
