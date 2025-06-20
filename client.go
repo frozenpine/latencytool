@@ -378,7 +378,7 @@ func (c *LatencyClient) runReporter() {
 
 	for state := range c.notify {
 		slog.Info(
-			"ctl log reporter for priorities",
+			"tool log reporter for priorities",
 			slog.Any("addr", state.AddrList),
 		)
 
@@ -400,13 +400,14 @@ func (c *LatencyClient) runReporter() {
 			}
 
 			slog.Info(
-				"sending latency results to reporter",
+				"sending latency state to reporter",
 				slog.String("reporter", name),
 			)
 
 			if err := reportFn(state); err != nil {
 				slog.Error(
-					"send latency results to reporter failed",
+					"send latency state to reporter failed",
+					slog.Any("error", err),
 					slog.String("reporter", name),
 				)
 			}
