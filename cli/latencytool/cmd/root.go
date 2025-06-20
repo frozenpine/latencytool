@@ -329,7 +329,7 @@ func init() {
 	rootCmd.PersistentFlags().StringSlice(
 		"ctl", nil, "Control service listen string",
 	)
-	rootCmd.PersistentFlags().String(
+	rootCmd.Flags().String(
 		"conn", "", "Control service connect string",
 	)
 
