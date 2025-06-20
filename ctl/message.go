@@ -135,25 +135,9 @@ func (m *Message) String() string {
 	return buff.String()
 }
 
-type cmd string
-
-const (
-	Cmdconfig   cmd = "config"
-	CmdReload   cmd = "reload"
-	CmdRestart  cmd = "restart"
-	CmdStop     cmd = "stop"
-	CmdShow     cmd = "show"
-	CmdPipeline cmd = "pipeline"
-)
-
 type Command struct {
-	Name   cmd `json:"name"`
+	Name   string `json:"name"`
 	KwArgs map[string]string
-}
-
-func (cmd *Command) Chain() ([]*Command, error) {
-	// TODO
-	return nil, nil
 }
 
 type rtnCode int
@@ -163,7 +147,7 @@ type values map[string]json.RawMessage
 type Result struct {
 	Rtn     rtnCode
 	Message string
-	CmdName cmd
+	CmdName string
 	Values  values
 }
 

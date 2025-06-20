@@ -3,17 +3,29 @@ package tui
 import (
 	"sync/atomic"
 
+	"github.com/frozenpine/latency4go/ctl"
 	"github.com/rivo/tview"
+	"github.com/spf13/pflag"
 )
 
 var (
 	MainLayout = tview.NewFlex()
 
-	running atomic.Bool
+	ctlClient atomic.Pointer[struct {
+		client ctl.CtlClient
+		flags  *pflag.FlagSet
+	}]
 )
 
-func StartTui() error {
-	// TODO
+func StartTui(client ctl.CtlClient, flags *pflag.FlagSet) error {
+	ctlClient.Store(&struct {
+		client ctl.CtlClient
+		flags  *pflag.FlagSet
+	}{
+		client: client,
+		flags:  flags,
+	})
+
 	return nil
 }
 

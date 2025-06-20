@@ -86,7 +86,7 @@ and report to trading systems`,
 			}
 
 			if useTui {
-				if err := tui.StartTui(); err != nil {
+				if err := tui.StartTui(client, cmd.Flags()); err != nil {
 					return err
 				}
 			}

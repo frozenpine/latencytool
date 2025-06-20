@@ -20,7 +20,7 @@ func init() {
 type tuiLogWr struct{}
 
 func (wr *tuiLogWr) Write(data []byte) (int, error) {
-	if running.Load() {
+	if ctlClient.Load() != nil {
 		return logView.Write(data)
 	}
 
