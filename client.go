@@ -150,11 +150,7 @@ func (c *LatencyClient) GetVersion() (string, error) {
 	return "", ErrNotInitialized
 }
 
-func (c *LatencyClient) queryLatency() ([]*ExFrontLatency, error) {
-	cfg := c.cfg.Load()
-	if cfg == nil {
-		return nil, ErrInvalidQueryCfg
-	}
+func (c *LatencyClient) queryLatency(cfg *QueryConfig) ([]*ExFrontLatency, error) {
 	qry, agg := cfg.makeQuery()
 
 	qryCtx, qryCancel := context.WithCancel(c.runCtx)
@@ -310,7 +306,7 @@ func (c *LatencyClient) runQuerier(
 				c.cancelRun("current query context done")
 				return
 			default:
-				latency, err := c.queryLatency()
+				latency, err := c.queryLatency(c.cfg.Load())
 
 				if err != nil {
 					slog.Error(
@@ -469,6 +465,23 @@ func (c *LatencyClient) SetConfig(data map[string]string) error {
 
 func (c *LatencyClient) GetConfig() QueryConfig {
 	return *c.cfg.Load()
+}
+
+func (c *LatencyClient) QueryLatency(kwargs map[string]string) (*State, error) {
+	tmpCfg := *c.cfg.Load()
+
+	for k, v := range kwargs {
+		if err := tmpCfg.SetConfig(k, v); err != nil {
+			return nil, err
+		}
+	}
+
+	latency, err := c.queryLatency(&tmpCfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewState(&tmpCfg, latency), nil
 }
 
 func (c *LatencyClient) Start(interval time.Duration) (err error) {
