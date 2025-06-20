@@ -53,6 +53,8 @@ type LatencyClient struct {
 	watchRun    chan error
 	cfg         atomic.Pointer[QueryConfig]
 	qryInterval atomic.Pointer[time.Duration]
+	suspend     atomic.Bool
+	suspendWg   sync.WaitGroup
 	notify      chan *State
 
 	sinkPath   string
@@ -287,6 +289,32 @@ func (c *LatencyClient) sinkLatency(latency []*ExFrontLatency) error {
 	return os.WriteFile(c.sinkPath, data, os.ModePerm)
 }
 
+func (c *LatencyClient) Suspend() bool {
+	if c.suspend.CompareAndSwap(false, true) {
+		c.suspendWg.Add(1)
+		return true
+	}
+
+	return false
+}
+
+func (c *LatencyClient) Resume() bool {
+	if c.suspend.CompareAndSwap(true, false) {
+		c.suspendWg.Done()
+		return true
+	}
+
+	return false
+}
+
+func (c *LatencyClient) ChangeInterval(interv time.Duration) time.Duration {
+	if interv <= 0 {
+		return interv
+	}
+
+	return *c.qryInterval.Swap(&interv)
+}
+
 func (c *LatencyClient) runQuerier(
 	timeout time.Duration,
 ) error {
@@ -306,6 +334,11 @@ func (c *LatencyClient) runQuerier(
 				c.cancelRun("current query context done")
 				return
 			default:
+				c.suspendWg.Wait()
+				if c.runCtx.Err() != nil {
+					return
+				}
+
 				currCfg := *c.cfg.Load()
 				latency, err := c.queryLatency(&currCfg)
 
@@ -529,6 +562,7 @@ func (c *LatencyClient) Join() error {
 func (c *LatencyClient) cancelRun(msg string) {
 	c.stopOnce.Do(func() {
 		c.runCancel()
+		c.Resume()
 
 		slog.Info(msg)
 	})

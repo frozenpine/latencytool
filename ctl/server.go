@@ -185,6 +185,56 @@ func (svr *CtlServer) execute(msgID uint64, cmd *Command) (*Message, error) {
 		slog.Any("cmd", cmd),
 	)
 	switch cmd.Name {
+	case "suspend":
+		var msg string
+		if svr.instance.Load().Suspend() {
+			msg = "ok"
+		} else {
+			msg = "failed"
+		}
+
+		return &Message{
+			msgID:   msgID,
+			msgType: MsgResult,
+			data:    []byte(msg),
+		}, nil
+	case "resume":
+		var msg string
+		if svr.instance.Load().Resume() {
+			msg = "ok"
+		} else {
+			msg = "failed"
+		}
+
+		return &Message{
+			msgID:   msgID,
+			msgType: MsgResult,
+			data:    []byte(msg),
+		}, nil
+	case "interval":
+		intv, err := time.ParseDuration(cmd.KwArgs["value"])
+		if err != nil {
+			return nil, err
+		}
+
+		rtn := svr.instance.Load().ChangeInterval(intv)
+		if rtn <= 0 {
+			return nil, errors.New("invalid interval")
+		}
+
+		data, err := json.Marshal(map[string]any{
+			"origin": rtn,
+			"new":    intv,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		return &Message{
+			msgID:   msgID,
+			msgType: MsgResult,
+			data:    data,
+		}, nil
 	case "state":
 		state := svr.instance.Load().GetLastState()
 		data, err := json.Marshal(state)
@@ -214,7 +264,6 @@ func (svr *CtlServer) execute(msgID uint64, cmd *Command) (*Message, error) {
 			msgType: MsgResult,
 			data:    data,
 		}, nil
-	// TODO cmd execution
 	default:
 		return nil, errors.New("unsupported command")
 	}
