@@ -86,9 +86,7 @@ and report to trading systems`,
 			}
 
 			if useTui {
-				if err := tui.StartTui(client, cmd.Flags()); err != nil {
-					return err
-				}
+				tui.StartTui(client, cmd.Flags(), cmdCancel)
 			}
 
 			client.Init(cmdCtx, "ctl client", client.Start)

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"sync/atomic"
 
 	"github.com/frozenpine/latency4go/ctl"
@@ -14,19 +15,28 @@ var (
 	ctlClient atomic.Pointer[struct {
 		client ctl.CtlClient
 		flags  *pflag.FlagSet
+		cancel context.CancelFunc
 	}]
 )
 
-func StartTui(client ctl.CtlClient, flags *pflag.FlagSet) error {
+func StartTui(
+	client ctl.CtlClient,
+	flags *pflag.FlagSet,
+	cancel context.CancelFunc,
+) {
 	ctlClient.Store(&struct {
 		client ctl.CtlClient
 		flags  *pflag.FlagSet
+		cancel context.CancelFunc
 	}{
 		client: client,
 		flags:  flags,
+		cancel: cancel,
 	})
 
-	return nil
+	app := tview.NewApplication().SetRoot(MainLayout, true)
+
+	go app.Run()
 }
 
 func init() {
