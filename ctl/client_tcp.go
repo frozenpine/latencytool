@@ -73,7 +73,10 @@ func (c *CtlTcpClient) Release() {
 }
 
 func NewCtlTcpClient(conn string) (*CtlTcpClient, error) {
-	c, err := net.Dial("tcp4", conn)
+	dialer := net.Dialer{
+		Timeout: time.Second * 10,
+	}
+	c, err := dialer.Dial("tcp4", conn)
 	if err != nil {
 		return nil, err
 	}

@@ -2,6 +2,7 @@ package ctl
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -103,10 +104,32 @@ func (client *CtlIpcClient) Release() {
 }
 
 func NewCtlIpcClient(conn string) (*CtlIpcClient, error) {
-	client, err := ipc.StartClient(conn, nil)
+	waitChan := make(chan struct {
+		c   *ipc.Client
+		err error
+	})
 
-	if err != nil {
-		return nil, err
+	go func() {
+		client, err := ipc.StartClient(conn, nil)
+		waitChan <- struct {
+			c   *ipc.Client
+			err error
+		}{
+			c:   client,
+			err: err,
+		}
+	}()
+
+	var client *ipc.Client
+	select {
+	case <-time.After(time.Second * 10):
+		return nil, errors.New("connect ipc timeout")
+	case r := <-waitChan:
+		if r.err != nil {
+			return nil, r.err
+		} else {
+			client = r.c
+		}
 	}
 
 	instance := &CtlIpcClient{
