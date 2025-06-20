@@ -121,3 +121,5 @@ go.work.sum
 **/bin
 *.json
 cli/latencytool/libs
+
+*.log
