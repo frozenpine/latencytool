@@ -112,7 +112,7 @@ func (tcpHdl *CtlTcpHandler) Start() {
 					"accept tcp client failed",
 					slog.Any("error", err),
 				)
-				continue
+				return
 			}
 
 			go tcpHdl.handleConn(conn)
