@@ -114,7 +114,9 @@ func (clib *CPluginLib) ReportFronts(addrList ...string) error {
 	return nil
 }
 
-func NewCPlugin(dirName, libName string) (lib *CPluginLib, err error) {
+func NewCPlugin(
+	dirName, libName string,
+) (container *PluginContainer, err error) {
 	var libPath string
 
 	switch runtime.GOOS {
@@ -138,19 +140,19 @@ func NewCPlugin(dirName, libName string) (lib *CPluginLib, err error) {
 		return nil, errors.New("unsupported platform")
 	}
 
-	lib = &CPluginLib{
+	lib := &CPluginLib{
 		libPath: libPath,
 	}
 
 	lib.loadOnce.Do(func() {
-		if !registeredPlugins.CompareAndSwap(
-			libName, nil, &pluginContainer{
+		if _, loaded := registeredPlugins.LoadOrStore(
+			libName, &PluginContainer{
 				pluginType: CPlugin,
 				libDir:     dirName,
 				name:       libName,
 				plugin:     lib,
 			},
-		) {
+		); loaded {
 			err = fmt.Errorf(
 				"%w: plugin already loaded", errLibOpenFailed,
 			)
@@ -227,6 +229,8 @@ func NewCPlugin(dirName, libName string) (lib *CPluginLib, err error) {
 				plugin.joinFn = nil
 			})
 		})
+
+		container, err = GetRegisteredPlugin(libName)
 	})
 
 	return

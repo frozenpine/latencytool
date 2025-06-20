@@ -295,13 +295,13 @@ func (svr *CtlServer) execute(msgID uint64, cmd *Command) (*Message, error) {
 			return nil, fmt.Errorf("%w: no plugin base dir", ErrInvalidMsgData)
 		}
 
-		if plugin, err := libs.NewPlugin(libDir, name); err != nil {
+		if container, err := libs.NewPlugin(libDir, name); err != nil {
 			return nil, errors.Join(ErrInvalidMsgData, err)
-		} else if err = plugin.Init(svr.ctx, config); err != nil {
+		} else if err = container.Plugin().Init(svr.ctx, config); err != nil {
 			return nil, errors.Join(ErrInvalidMsgData, err)
 		} else if err = svr.instance.Load().AddReporter(
 			name, func(s *latency4go.State) error {
-				return plugin.ReportFronts(s.AddrList...)
+				return container.Plugin().ReportFronts(s.AddrList...)
 			},
 		); err != nil {
 			return nil, errors.Join(ErrInvalidMsgData, err)

@@ -66,7 +66,7 @@ func (lib *GoPluginLib) Join() error {
 	return lib.joinFn()
 }
 
-func NewGoPlugin(dirName, libName string) (lib *GoPluginLib, err error) {
+func NewGoPlugin(dirName, libName string) (container *PluginContainer, err error) {
 	libDir := path.Join(dirName, libName)
 
 	switch runtime.GOOS {
@@ -86,19 +86,19 @@ func NewGoPlugin(dirName, libName string) (lib *GoPluginLib, err error) {
 
 	libPath := filepath.Join(libDir, libName+".plugin")
 
-	lib = &GoPluginLib{
+	lib := &GoPluginLib{
 		libPath: libPath,
 	}
 
 	lib.loadOnce.Do(func() {
-		if !registeredPlugins.CompareAndSwap(
-			libName, nil, &pluginContainer{
+		if _, loaded := registeredPlugins.LoadOrStore(
+			libName, &PluginContainer{
 				pluginType: GoPlugin,
 				libDir:     libDir,
 				name:       libName,
 				plugin:     lib,
 			},
-		) {
+		); loaded {
 			err = fmt.Errorf(
 				"%w: plugin already loaded", errLibOpenFailed,
 			)
@@ -157,6 +157,8 @@ func NewGoPlugin(dirName, libName string) (lib *GoPluginLib, err error) {
 				plugin.joinFn = nil
 			})
 		})
+
+		container, err = GetRegisteredPlugin(libName)
 	})
 
 	return

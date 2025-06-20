@@ -3,6 +3,7 @@ package libs
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"runtime"
 	"strings"
 	"sync"
@@ -31,7 +32,7 @@ type Plugin interface {
 	ReportFronts(...string) error
 }
 
-type pluginContainer struct {
+type PluginContainer struct {
 	pluginType
 
 	plugin Plugin
@@ -39,13 +40,25 @@ type pluginContainer struct {
 	name   string
 }
 
-func (c *pluginContainer) Plugin() Plugin {
+func (c *PluginContainer) Plugin() Plugin {
 	return c.plugin
 }
 
-func (c *pluginContainer) String() string {
+func (c *PluginContainer) Name() string {
+	return c.name
+}
+
+func (c *PluginContainer) String() string {
 	buff := bytebufferpool.Get()
 	defer bytebufferpool.Put(buff)
+
+	buff.WriteString("Plugin{Name:")
+	buff.WriteString(c.name)
+	buff.WriteString(" LibDir:")
+	buff.WriteString(c.libDir)
+	buff.WriteString(" Type:")
+	buff.WriteString(string(c.pluginType))
+	buff.WriteString("}")
 
 	return buff.String()
 }
@@ -54,12 +67,8 @@ var (
 	registeredPlugins sync.Map
 )
 
-func NewPlugin(libDir, name string) (Plugin, error) {
-	var (
-		libType = GoPlugin
-		plugin  Plugin
-		err     error
-	)
+func NewPlugin(libDir, name string) (container *PluginContainer, err error) {
+	var libType = GoPlugin
 
 	if strings.HasPrefix(name, "C.") {
 		libType = CPlugin
@@ -72,26 +81,22 @@ func NewPlugin(libDir, name string) (Plugin, error) {
 
 	switch libType {
 	case GoPlugin:
-		plugin, err = NewGoPlugin(libDir, name)
+		container, err = NewGoPlugin(libDir, name)
+		return
 	case CPlugin:
-		plugin, err = NewCPlugin(libDir, name)
+		container, err = NewCPlugin(libDir, name)
+		return
 	default:
 		return nil, ErrInvalidPluginType
 	}
-
-	if err != nil {
-		return nil, err
-	} else {
-		return plugin, nil
-	}
 }
 
-func GetRegisteredPlugin(name string) (*pluginContainer, error) {
+func GetRegisteredPlugin(name string) (*PluginContainer, error) {
 	v, exist := registeredPlugins.Load(name)
 	if !exist {
 		return nil, errLibNotRegistered
 	}
-	plugin, ok := v.(*pluginContainer)
+	plugin, ok := v.(*PluginContainer)
 
 	if !ok {
 		registeredPlugins.Delete(name)
@@ -101,7 +106,7 @@ func GetRegisteredPlugin(name string) (*pluginContainer, error) {
 	return plugin, nil
 }
 
-func GetAndUnRegisterPlugin(name string) (plugin *pluginContainer, err error) {
+func GetAndUnRegisterPlugin(name string) (plugin *PluginContainer, err error) {
 	defer func() {
 		if err != nil {
 			return
@@ -110,11 +115,29 @@ func GetAndUnRegisterPlugin(name string) (plugin *pluginContainer, err error) {
 		if plugin.pluginType != GoPlugin {
 			registeredPlugins.Delete(name)
 		} else {
-			err = errors.New("")
+			slog.Warn(
+				"go plugin can not be unloaded",
+				slog.String("name", name),
+			)
 		}
 	}()
 
 	plugin, err = GetRegisteredPlugin(name)
+
+	return
+}
+
+func RangePlugins(fn func(name string, container *PluginContainer) error) (err error) {
+	registeredPlugins.Range(func(key, value any) bool {
+		name, _ := key.(string)
+		container, _ := value.(*PluginContainer)
+
+		if err = fn(name, container); err != nil {
+			return false
+		}
+
+		return true
+	})
 
 	return
 }

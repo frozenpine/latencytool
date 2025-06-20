@@ -5,7 +5,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -18,34 +17,6 @@ import (
 )
 
 const DEFAULT_PLUGIN_LIB_DIR = "libs"
-
-type pluginCache map[string]libs.Plugin
-
-func (p *pluginCache) Set(name string) error {
-	if p == nil || *p == nil {
-		*p = make(pluginCache)
-	}
-
-	plugin, err := libs.NewPlugin(libDir, name)
-	if err != nil {
-		return errors.Join(errInvalidArgs, err)
-	}
-
-	(*p)[name] = plugin
-
-	return nil
-}
-
-func (p pluginCache) Type() string {
-	return "PluginCache"
-}
-
-func (p pluginCache) String() string {
-	buff := bytebufferpool.Get()
-	defer bytebufferpool.Put(buff)
-
-	return buff.String()
-}
 
 type pluginConfigs map[string]string
 
@@ -80,7 +51,6 @@ func (c pluginConfigs) String() string {
 }
 
 var (
-	plugins = make(pluginCache)
 	configs = make(pluginConfigs)
 
 	libDir string
@@ -96,8 +66,15 @@ trading systems specified by args.`,
 		rptCtx, rptCancel := context.WithCancel(cmdCtx)
 		defer rptCancel()
 
-		for name, plugin := range plugins {
-			cfg, exists := configs[name]
+		plugins, _ := cmd.Flags().GetStringSlice("plugin")
+
+		for idx, name := range plugins {
+			container, err := libs.NewPlugin(libDir, name)
+			if err != nil {
+				return err
+			}
+
+			cfg, exists := configs[container.Name()]
 
 			if !exists {
 				return fmt.Errorf(
@@ -111,9 +88,12 @@ trading systems specified by args.`,
 				slog.String("name", name),
 			)
 
-			if err := plugin.Init(rptCtx, cfg); err != nil {
+			if err := container.Plugin().Init(rptCtx, cfg); err != nil {
 				return err
 			}
+
+			// 修正plugin实际名称
+			plugins[idx] = container.Name()
 		}
 
 		return nil
@@ -132,14 +112,24 @@ trading systems specified by args.`,
 		}
 
 		if ins := client.Load(); ins != nil {
-			for name, plugin := range plugins {
+			if err := libs.RangePlugins(func(
+				name string, container *libs.PluginContainer,
+			) error {
 				if err := ins.AddReporter(
 					name, func(s *latency4go.State) error {
-						return plugin.ReportFronts(s.AddrList...)
+						return container.Plugin().ReportFronts(s.AddrList...)
 					},
 				); err != nil {
 					return err
 				}
+
+				slog.Info(
+					"plugin reporter registered",
+					slog.String("plugin", container.String()),
+				)
+				return nil
+			}); err != nil {
+				return err
 			}
 
 			if err := ins.Start(interval); err != nil {
@@ -152,9 +142,31 @@ trading systems specified by args.`,
 		return errInvalidInstance
 	},
 	PostRun: func(cmd *cobra.Command, args []string) {
-		for _, plugin := range plugins {
-			plugin.Join()
-		}
+		libs.RangePlugins(func(
+			name string, container *libs.PluginContainer,
+		) error {
+			slog.Info(
+				"trying to stop plugin",
+				slog.String("plugin", container.String()),
+			)
+
+			container.Plugin().Stop()
+
+			if err := container.Plugin().Join(); err != nil {
+				slog.Error(
+					"plugin stop failed",
+					slog.Any("error", err),
+					slog.String("plugin", container.String()),
+				)
+			} else {
+				slog.Info(
+					"plugin stopped",
+					slog.String("plugin", container.String()),
+				)
+			}
+
+			return nil
+		})
 	},
 }
 
@@ -164,8 +176,8 @@ func init() {
 	reportCmd.Flags().StringVar(
 		&libDir, "lib", DEFAULT_PLUGIN_LIB_DIR, "Reporter plugin lib dir",
 	)
-	reportCmd.Flags().Var(
-		&plugins, "plugin",
+	reportCmd.Flags().StringSlice(
+		"plugin", nil,
 		"Reporter plugin's name, loaded from ${lib}/${plugin}/${plugin}.{ext}",
 	)
 	reportCmd.Flags().Var(
