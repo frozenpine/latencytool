@@ -53,7 +53,7 @@ type LatencyClient struct {
 	watchRun    chan error
 	cfg         atomic.Pointer[QueryConfig]
 	qryInterval atomic.Pointer[time.Duration]
-	notify      chan struct{}
+	notify      chan *State
 
 	sinkPath   string
 	lastReport atomic.Pointer[[]*ExFrontLatency]
@@ -306,7 +306,8 @@ func (c *LatencyClient) runQuerier(
 				c.cancelRun("current query context done")
 				return
 			default:
-				latency, err := c.queryLatency(c.cfg.Load())
+				currCfg := *c.cfg.Load()
+				latency, err := c.queryLatency(&currCfg)
 
 				if err != nil {
 					slog.Error(
@@ -325,8 +326,10 @@ func (c *LatencyClient) runQuerier(
 					)
 				}
 
+				state := NewState(&currCfg, latency)
+
 				select {
-				case c.notify <- struct{}{}:
+				case c.notify <- state:
 				case <-time.After(timeout):
 					slog.Error(
 						"publish latency timedout",
@@ -373,8 +376,11 @@ func (c *LatencyClient) runReporter() {
 		slog.Info("all reporters exitted")
 	}()
 
-	for range c.notify {
-		state := c.GetLastState()
+	for state := range c.notify {
+		slog.Info(
+			"ctl log reporter for priorities",
+			slog.Any("addr", state.AddrList),
+		)
 
 		c.reporters.Range(func(key, value any) bool {
 			name, ok := key.(string)
@@ -501,7 +507,7 @@ func (c *LatencyClient) Start(interval time.Duration) (err error) {
 			slog.Info("onetime running latency client")
 		}
 
-		c.notify = make(chan struct{}, 10)
+		c.notify = make(chan *State, 10)
 
 		if err = c.runQuerier(time.Second * 5); err != nil {
 			return
