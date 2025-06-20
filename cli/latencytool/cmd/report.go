@@ -8,28 +8,16 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"runtime"
 	"strings"
 	"time"
 
 	"github.com/frozenpine/latency4go"
-	"github.com/frozenpine/latency4go/cli/latencytool/libs"
+	"github.com/frozenpine/latency4go/libs"
 	"github.com/spf13/cobra"
 	"github.com/valyala/bytebufferpool"
 )
 
-const PLUGIN_LIB_DIR = "libs"
-
-var (
-	libDir string
-)
-
-type pluginType string
-
-const (
-	Go pluginType = "golib"
-	C  pluginType = "clib"
-)
+const DEFAULT_PLUGIN_LIB_DIR = "libs"
 
 type pluginCache map[string]libs.Plugin
 
@@ -38,30 +26,7 @@ func (p *pluginCache) Set(name string) error {
 		*p = make(pluginCache)
 	}
 
-	var (
-		libType = Go
-		plugin  libs.Plugin
-		err     error
-	)
-
-	if strings.HasPrefix(name, "C.") {
-		libType = C
-		name = strings.TrimPrefix(name, "C.")
-	} else if strings.ToLower(runtime.GOOS) != "linux" {
-		// go plugin only supported in linux
-		// double check environment for correct plugin type
-		libType = C
-	}
-
-	switch libType {
-	case Go:
-		plugin, err = libs.NewPlugin(libDir, name)
-	case C:
-		plugin, err = libs.NewCPlugin(libDir, name)
-	default:
-		return errInvalidArgs
-	}
-
+	plugin, err := libs.NewPlugin(libDir, name)
 	if err != nil {
 		return errors.Join(errInvalidArgs, err)
 	}
@@ -117,6 +82,8 @@ func (c pluginConfigs) String() string {
 var (
 	plugins = make(pluginCache)
 	configs = make(pluginConfigs)
+
+	libDir string
 )
 
 // reportCmd represents the report command
@@ -195,7 +162,7 @@ func init() {
 	rootCmd.AddCommand(reportCmd)
 
 	reportCmd.Flags().StringVar(
-		&libDir, "lib", PLUGIN_LIB_DIR, "Reporter plugin lib dir",
+		&libDir, "lib", DEFAULT_PLUGIN_LIB_DIR, "Reporter plugin lib dir",
 	)
 	reportCmd.Flags().Var(
 		&plugins, "plugin",

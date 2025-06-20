@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/frozenpine/latency4go"
+	"github.com/frozenpine/latency4go/libs"
 	"github.com/frozenpine/msgqueue/channel"
 )
 
@@ -219,7 +220,7 @@ func (svr *CtlServer) execute(msgID uint64, cmd *Command) (*Message, error) {
 
 		rtn := svr.instance.Load().ChangeInterval(intv)
 		if rtn <= 0 {
-			return nil, errors.New("invalid interval")
+			return nil, fmt.Errorf("%w: invalid interval", ErrInvalidMsgData)
 		}
 
 		data, err := json.Marshal(map[string]any{
@@ -227,7 +228,7 @@ func (svr *CtlServer) execute(msgID uint64, cmd *Command) (*Message, error) {
 			"new":    intv,
 		})
 		if err != nil {
-			return nil, err
+			return nil, errors.Join(ErrInvalidMsgData, err)
 		}
 
 		return &Message{
@@ -240,7 +241,7 @@ func (svr *CtlServer) execute(msgID uint64, cmd *Command) (*Message, error) {
 		data, err := json.Marshal(state)
 
 		if err != nil {
-			return nil, err
+			return nil, errors.Join(ErrInvalidMsgData, err)
 		}
 
 		return &Message{
@@ -250,19 +251,101 @@ func (svr *CtlServer) execute(msgID uint64, cmd *Command) (*Message, error) {
 		}, nil
 	case "config":
 		if err := svr.instance.Load().SetConfig(cmd.KwArgs); err != nil {
-			return nil, err
+			return nil, errors.Join(ErrInvalidMsgData, err)
 		}
 
 		cfg := svr.instance.Load().GetConfig()
 		data, err := json.Marshal(cfg)
 		if err != nil {
-			return nil, err
+			return nil, errors.Join(ErrInvalidMsgData, err)
 		}
 
 		return &Message{
 			msgID:   msgID,
 			msgType: MsgResult,
 			data:    data,
+		}, nil
+	case "query":
+		state, err := svr.instance.Load().QueryLatency(cmd.KwArgs)
+		if err != nil {
+			return nil, errors.Join(ErrInvalidMsgData, err)
+		}
+
+		data, err := json.Marshal(state)
+		if err != nil {
+			return nil, errors.Join(ErrInvalidMsgData, err)
+		}
+
+		return &Message{
+			msgID:   msgID,
+			msgType: MsgResult,
+			data:    data,
+		}, nil
+	case "plugin":
+		name, exist := cmd.KwArgs["name"]
+		if !exist {
+			return nil, fmt.Errorf("%w: no plugin name", ErrInvalidMsgData)
+		}
+		config, exist := cmd.KwArgs["config"]
+		if !exist {
+			return nil, fmt.Errorf("%w: no plugin config", ErrInvalidMsgData)
+		}
+		libDir, exist := cmd.KwArgs["libs"]
+		if !exist {
+			return nil, fmt.Errorf("%w: no plugin base dir", ErrInvalidMsgData)
+		}
+
+		if plugin, err := libs.NewPlugin(libDir, name); err != nil {
+			return nil, errors.Join(ErrInvalidMsgData, err)
+		} else if err = plugin.Init(svr.ctx, config); err != nil {
+			return nil, errors.Join(ErrInvalidMsgData, err)
+		} else if err = svr.instance.Load().AddReporter(
+			name, func(s *latency4go.State) error {
+				return plugin.ReportFronts(s.AddrList...)
+			},
+		); err != nil {
+			return nil, errors.Join(ErrInvalidMsgData, err)
+		} else {
+			return &Message{
+				msgID:   msgID,
+				msgType: MsgResult,
+				data:    []byte(fmt.Sprintf("plugin[%s] added", name)),
+			}, nil
+		}
+	case "unplugin":
+		name, exist := cmd.KwArgs["name"]
+
+		if !exist {
+			return nil, fmt.Errorf("%w: no plugin name", ErrInvalidMsgData)
+		}
+
+		if err := svr.instance.Load().DelReporter(name); err != nil {
+			return nil, fmt.Errorf(
+				"%w: del reporter from client faield",
+				ErrInvalidMsgData,
+			)
+		}
+
+		container, err := libs.GetAndUnRegisterPlugin(name)
+		if err != nil {
+			if container == nil {
+				return nil, errors.Join(ErrInvalidMsgData, err)
+			} else {
+				slog.Warn(
+					"unregister plugin with error",
+					slog.Any("error", err),
+				)
+			}
+		}
+		container.Plugin().Stop()
+		if err = container.Plugin().Join(); err != nil {
+			return nil, errors.Join(ErrInvalidMsgData, err)
+		}
+
+		return &Message{
+			msgID:   msgID,
+			msgType: MsgResult,
+			data:    []byte(container.String()),
 		}, nil
 	default:
 		return nil, errors.New("unsupported command")
