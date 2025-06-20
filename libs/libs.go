@@ -68,15 +68,21 @@ var (
 )
 
 func NewPlugin(libDir, name string) (container *PluginContainer, err error) {
-	var libType = GoPlugin
+	var libType = CPlugin
 
-	if strings.HasPrefix(name, "C.") {
-		libType = CPlugin
-		name = strings.TrimPrefix(name, "C.")
-	} else if strings.ToLower(runtime.GOOS) != "linux" {
+	if strings.ToLower(runtime.GOOS) != "linux" {
 		// go plugin only supported in linux
 		// double check environment for correct plugin type
 		libType = CPlugin
+	} else {
+		switch {
+		case strings.HasPrefix(name, "Go."):
+			libType = GoPlugin
+			name = strings.TrimPrefix(name, "Go.")
+		case strings.HasPrefix(name, "C."):
+			libType = CPlugin
+			name = strings.TrimPrefix(name, "C.")
+		}
 	}
 
 	switch libType {
