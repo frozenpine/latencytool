@@ -65,8 +65,18 @@ func (c *ctlBaseClient) MessageLoop(
 		}
 	}
 
+	subId, notify := c.Subscribe(name, core.Quick)
+
+	slog.Info(
+		"message loop get new subscribe",
+		slog.Any("name", name),
+		slog.String("sub_id", subId.String()),
+	)
+
 	go func() {
 		defer func() {
+			c.UnSubscribe(subId)
+
 			if postRun == nil {
 				return
 			}
@@ -78,8 +88,6 @@ func (c *ctlBaseClient) MessageLoop(
 				)
 			}
 		}()
-
-		subId, notify := c.Subscribe(name, core.Quick)
 
 		for msg := range notify {
 			var state *latency4go.State
@@ -197,7 +205,6 @@ func (c *ctlBaseClient) MessageLoop(
 			}
 		}
 
-		c.UnSubscribe(subId)
 		slog.Info("ctl client message loop exit")
 	}()
 
