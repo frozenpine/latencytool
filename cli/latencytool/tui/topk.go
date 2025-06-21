@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"log/slog"
 	"strconv"
 	"sync/atomic"
 
@@ -13,16 +14,16 @@ var (
 	topN     = tview.NewList()
 	topTs    = tview.NewTextView()
 	top      atomic.Uint32
-	lastTop  atomic.Pointer[[]string]
 )
 
 func init() {
 	top.Store(3)
-	topKView.AddItem(
-		topN.SetSelectedFocusOnly(true), 0, 5, false,
+	topKView.SetDirection(
+		tview.FlexRow,
 	).AddItem(
-		topTs,
-		0, 5, false,
+		topN.SetSelectedFocusOnly(true), 0, 1, false,
+	).AddItem(
+		topTs, 1, 0, false,
 	).SetTitle(
 		fmt.Sprintf(" Top %d Fronts ", top.Load()),
 	).SetTitleAlign(
@@ -30,18 +31,24 @@ func init() {
 	).SetBorder(
 		true,
 	).SetBorderPadding(
-		1, 1, 1, 1,
+		0, 0, 1, 1,
 	)
 }
 
-func change() {
+func SetTopK() {
 	if client := instance.Load(); client != nil {
+		state := lastState.Load()
+		if state == nil {
+			slog.Error("no state found when set TopK")
+			return
+		}
+
 		client.app.Lock()
 		defer client.app.Unlock()
 
 		topN.Clear()
 
-		for idx, v := range *lastTop.Load() {
+		for idx, v := range state.AddrList {
 			pri := idx + 1
 
 			if pri > int(top.Load()) {
@@ -50,22 +57,28 @@ func change() {
 
 			priV := strconv.Itoa(pri)
 
-			topN.AddItem(v, "", rune(priV[0]), nil)
+			topN.AddItem(
+				v,
+				"priority: "+strconv.FormatFloat(
+					state.LatencyList[idx].Priority,
+					'f', -1, 64,
+				),
+				rune(priV[0]),
+				nil)
 		}
 
 		topKView.SetTitle(fmt.Sprintf(" Top %d Fronts ", top.Load()))
-		topTs.SetText(updateTs.Load().String())
+		topTs.SetText(
+			fmt.Sprintf(
+				"Update : %s",
+				state.Timestamp.Local().Format("2006-01-02 15:04:05"),
+			),
+		)
 	}
-}
-
-func SetTopK(values ...string) {
-	lastTop.Store(&values)
-
-	change()
 }
 
 func ChangeTopK(n int) {
 	top.Store(uint32(n))
 
-	change()
+	SetTopK()
 }

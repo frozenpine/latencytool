@@ -5,8 +5,8 @@ import (
 	"errors"
 	"log/slog"
 	"sync/atomic"
-	"time"
 
+	"github.com/frozenpine/latency4go"
 	"github.com/frozenpine/latency4go/ctl"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -23,8 +23,8 @@ type ctlTuiClient struct {
 var (
 	MainLayout = tview.NewFlex()
 
-	instance atomic.Pointer[ctlTuiClient]
-	updateTs atomic.Pointer[time.Time]
+	instance  atomic.Pointer[ctlTuiClient]
+	lastState atomic.Pointer[latency4go.State]
 )
 
 func StartTui(
@@ -91,8 +91,10 @@ func StartTui(
 						slog.Time("timestamp", state.Timestamp),
 						slog.Any("config", state.Config),
 					)
-					updateTs.Store(&state.Timestamp)
-					SetTopK(state.AddrList...)
+
+					lastState.Store(state)
+					SetTopK()
+					SetConfig()
 				}
 			default:
 				slog.Warn(
@@ -120,9 +122,9 @@ func init() {
 			tview.NewFlex().SetDirection(
 				tview.FlexRow,
 			).AddItem(
-				topKView, 0, 5, false,
+				topKView, 0, 6, false,
 			).AddItem(
-				configView, 0, 5, false,
+				configView, 0, 4, false,
 			),
 			0, 2, false,
 		),

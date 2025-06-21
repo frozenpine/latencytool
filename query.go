@@ -315,7 +315,7 @@ func (tr TimeRange) String() string {
 
 	values := tr.GetRange()
 
-	buff.WriteString("TimeRange[")
+	buff.WriteString("[")
 	buff.WriteString(values[0])
 	buff.WriteString(" ~ ")
 	buff.WriteString(values[1])
@@ -333,7 +333,7 @@ func (to Tick2Order) String() string {
 	buff := bytebufferpool.Get()
 	defer bytebufferpool.Put(buff)
 
-	buff.WriteString("Tick2OrderRange[")
+	buff.WriteString("[")
 	buff.WriteString(strconv.FormatFloat(
 		float64(to.From)/1000000.0, 'f', -1, 64,
 	))
@@ -347,6 +347,23 @@ func (to Tick2Order) String() string {
 }
 
 type Users []string
+
+func (u Users) String() string {
+	buff := bytebufferpool.Get()
+	defer bytebufferpool.Put(buff)
+
+	buff.WriteString("[")
+	for idx, v := range u {
+		if idx > 0 {
+			buff.WriteByte(' ')
+		}
+
+		buff.WriteString(v)
+	}
+	buff.WriteString("]")
+
+	return buff.String()
+}
 
 type Quantile []float64
 
@@ -390,12 +407,12 @@ func (cfg *QueryConfig) String() string {
 	buff := bytebufferpool.Get()
 	defer bytebufferpool.Put(buff)
 
-	buff.WriteString("QueryConfig{")
+	buff.WriteString("QueryConfig{TimeRange:")
 	buff.WriteString(cfg.TimeRange.String())
-	buff.WriteByte(' ')
+	buff.WriteString(" Tick2Order:")
 	buff.WriteString(cfg.Tick2Order.String())
 	buff.WriteString(" UsersFilter:")
-	buff.WriteString(fmt.Sprint(cfg.Users))
+	buff.WriteString(cfg.Users.String())
 	buff.WriteString(" DataSize:")
 	buff.WriteString(strconv.Itoa(cfg.DataSize))
 	buff.WriteString(" AggSize:")
