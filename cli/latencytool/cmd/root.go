@@ -21,7 +21,6 @@ import (
 	"github.com/frozenpine/latency4go"
 	"github.com/frozenpine/latency4go/cli/latencytool/tui"
 	"github.com/frozenpine/latency4go/ctl"
-	"github.com/frozenpine/msgqueue/core"
 )
 
 var (
@@ -97,14 +96,6 @@ and report to trading systems`,
 			} else {
 				client.Init(cmdCtx, "ctl client", client.Start)
 
-				_, results := client.Subscribe("ctl client", core.Quick)
-
-				for msg := range results {
-					slog.Info(
-						"msg return from ctl server",
-						slog.Any("rtn", msg),
-					)
-				}
 			}
 
 			client.Join()
@@ -345,6 +336,9 @@ func init() {
 	)
 	rootCmd.Flags().Bool(
 		"tui", false, "Use TUI for ctl client console",
+	)
+	rootCmd.Flags().String(
+		"cmd", "", "Command for ctl server handle",
 	)
 
 	for _, cmd := range rootCmd.Commands() {

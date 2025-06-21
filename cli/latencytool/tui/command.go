@@ -18,7 +18,7 @@ var (
 	commandHelp = `Available commands:
  suspend: suspend latency client running
   resume: resume suspended latency client
-interval: change latency tool query interval
+  period: change latency tool query period
    state: query latency tool last state
   config: change latency tool query config
    query: query latency result with onetime config
@@ -80,7 +80,7 @@ func init() {
 		switch commands[0] {
 		case "suspend":
 		case "resume":
-		case "interval":
+		case "period":
 		case "state":
 		case "config":
 		case "query":
