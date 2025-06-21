@@ -213,7 +213,7 @@ func (svr *CtlServer) execute(msgID uint64, cmd *Command) (*Message, error) {
 			data:    []byte(msg),
 		}, nil
 	case "interval":
-		intv, err := time.ParseDuration(cmd.KwArgs["value"])
+		intv, err := time.ParseDuration(cmd.KwArgs["interval"])
 		if err != nil {
 			return nil, err
 		}
@@ -282,7 +282,7 @@ func (svr *CtlServer) execute(msgID uint64, cmd *Command) (*Message, error) {
 			data:    data,
 		}, nil
 	case "plugin":
-		name, exist := cmd.KwArgs["name"]
+		name, exist := cmd.KwArgs["plugin"]
 		if !exist {
 			return nil, fmt.Errorf("%w: no plugin name", ErrInvalidMsgData)
 		}
@@ -290,7 +290,7 @@ func (svr *CtlServer) execute(msgID uint64, cmd *Command) (*Message, error) {
 		if !exist {
 			return nil, fmt.Errorf("%w: no plugin config", ErrInvalidMsgData)
 		}
-		libDir, exist := cmd.KwArgs["libs"]
+		libDir, exist := cmd.KwArgs["lib"]
 		if !exist {
 			return nil, fmt.Errorf("%w: no plugin base dir", ErrInvalidMsgData)
 		}
@@ -313,7 +313,7 @@ func (svr *CtlServer) execute(msgID uint64, cmd *Command) (*Message, error) {
 			}, nil
 		}
 	case "unplugin":
-		name, exist := cmd.KwArgs["name"]
+		name, exist := cmd.KwArgs["plugin"]
 
 		if !exist {
 			return nil, fmt.Errorf("%w: no plugin name", ErrInvalidMsgData)

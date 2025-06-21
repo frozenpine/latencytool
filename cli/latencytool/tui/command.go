@@ -11,7 +11,24 @@ import (
 	"github.com/spf13/pflag"
 )
 
-var commandView = tview.NewInputField()
+var (
+	commandView = tview.NewInputField()
+
+	commandHelp = `Available commands:
+ suspend: suspend latency client running
+  resume: resume suspended latency client
+interval: change latency tool query interval
+   state: query latency tool last state
+  config: change latency tool query config
+   query: query latency result with onetime config
+  plugin: add latency reporter plugin
+unplugin: remove reporter plugin from latency tool
+	help: print this help message
+	exit: exit ctl client running
+`
+	commandHistory = []string{}
+	commandHisIdx  = 0
+)
 
 func init() {
 	commandView.SetLabel(
@@ -66,8 +83,12 @@ func init() {
 		case "query":
 		case "plugin":
 		case "unplugin":
+		case "help":
+			logView.Write([]byte(commandHelp))
+			goto END
 		case "exit":
 			client.cancel()
+			return
 		default:
 			slog.Error(
 				"unsupported command",
@@ -88,13 +109,46 @@ func init() {
 				slog.Any("args", commands[1:]),
 			)
 		}
+
+	END:
+		commandHistory = append(commandHistory, inputCommand)
+		commandHisIdx = len(commandHistory)
 	}).SetFinishedFunc(func(key tcell.Key) {
-		commandView.SetText(" ")
+		commandView.SetText("")
 
 		if client := instance.Load(); client != nil {
 			commandView.SetLabel(
-				fmt.Sprintf("Command[%d] >", client.client.GetCmdSeq()),
+				fmt.Sprintf("Command[%d] > ", client.client.GetCmdSeq()),
 			)
 		}
+	})
+
+	commandView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyUp:
+			commandHisIdx--
+			if commandHisIdx < 0 {
+				commandHisIdx = -1
+				commandView.SetText("")
+				return nil
+			}
+		case tcell.KeyDown:
+			commandHisIdx++
+			if commandHisIdx >= len(commandHistory) {
+				commandHisIdx = len(commandHistory)
+				commandView.SetText("")
+				return nil
+			}
+		default:
+			return event
+		}
+
+		if commandHisIdx >= 0 && commandHisIdx < len(commandHistory) {
+			commandView.SetText(commandHistory[commandHisIdx])
+		} else {
+			commandView.SetText("")
+		}
+
+		return nil
 	})
 }
