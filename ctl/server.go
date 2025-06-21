@@ -185,151 +185,153 @@ func (svr *CtlServer) execute(msgID uint64, cmd *Command) (*Message, error) {
 		"ctl server executing command",
 		slog.Any("cmd", cmd),
 	)
+
+	result := Result{
+		CmdName: cmd.Name,
+	}
+
 	switch cmd.Name {
 	case "suspend":
-		var msg string
 		if svr.instance.Load().Suspend() {
-			msg = "ok"
+			result.Message = "suspend success"
 		} else {
-			msg = "failed"
+			result.Rtn = 1
+			result.Message = "suspend failed"
 		}
-
-		return &Message{
-			msgID:   msgID,
-			msgType: MsgResult,
-			data:    []byte(msg),
-		}, nil
 	case "resume":
-		var msg string
 		if svr.instance.Load().Resume() {
-			msg = "ok"
+			result.Message = "resume success"
 		} else {
-			msg = "failed"
+			result.Rtn = 1
+			result.Message = "resume failed"
 		}
-
-		return &Message{
-			msgID:   msgID,
-			msgType: MsgResult,
-			data:    []byte(msg),
-		}, nil
 	case "interval":
 		intv, err := time.ParseDuration(cmd.KwArgs["interval"])
 		if err != nil {
-			return nil, err
+			result.Rtn = 1
+			result.Message = err.Error()
+			break
 		}
 
 		rtn := svr.instance.Load().ChangeInterval(intv)
 		if rtn <= 0 {
-			return nil, fmt.Errorf("%w: invalid interval", ErrInvalidMsgData)
+			result.Rtn = 1
+			result.Message = fmt.Sprintf(
+				"%+v: invalid interval", ErrInvalidMsgData,
+			)
 		}
 
-		data, err := json.Marshal(map[string]any{
-			"origin": rtn,
-			"new":    intv,
-		})
-		if err != nil {
-			return nil, errors.Join(ErrInvalidMsgData, err)
+		result.Values = map[string]any{
+			"origin": rtn.String(),
+			"new":    intv.String(),
 		}
-
-		return &Message{
-			msgID:   msgID,
-			msgType: MsgResult,
-			data:    data,
-		}, nil
 	case "state":
-		state := svr.instance.Load().GetLastState()
-		data, err := json.Marshal(state)
-
-		if err != nil {
-			return nil, errors.Join(ErrInvalidMsgData, err)
+		if state := svr.instance.Load().GetLastState(); state != nil {
+			result.Values = map[string]any{
+				"state": state,
+			}
+		} else {
+			result.Rtn = 1
+			result.Message = "get last state failed"
 		}
-
-		return &Message{
-			msgID:   msgID,
-			msgType: MsgResult,
-			data:    data,
-		}, nil
 	case "config":
 		if err := svr.instance.Load().SetConfig(cmd.KwArgs); err != nil {
-			return nil, errors.Join(ErrInvalidMsgData, err)
+			result.Rtn = 1
+			result.Message = fmt.Sprintf(
+				"%+v: set config failed", err,
+			)
+			break
 		}
 
 		cfg := svr.instance.Load().GetConfig()
-		data, err := json.Marshal(cfg)
-		if err != nil {
-			return nil, errors.Join(ErrInvalidMsgData, err)
+		result.Values = map[string]any{
+			"Config": cfg,
 		}
-
-		return &Message{
-			msgID:   msgID,
-			msgType: MsgResult,
-			data:    data,
-		}, nil
 	case "query":
 		state, err := svr.instance.Load().QueryLatency(cmd.KwArgs)
 		if err != nil {
-			return nil, errors.Join(ErrInvalidMsgData, err)
+			result.Rtn = 1
+			result.Message = fmt.Sprintf(
+				"%+v: query latency failed", err,
+			)
+
+			break
 		}
 
-		data, err := json.Marshal(state)
-		if err != nil {
-			return nil, errors.Join(ErrInvalidMsgData, err)
+		result.Values = map[string]any{
+			"state": state,
 		}
-
-		return &Message{
-			msgID:   msgID,
-			msgType: MsgResult,
-			data:    data,
-		}, nil
 	case "plugin":
 		name, exist := cmd.KwArgs["plugin"]
 		if !exist {
-			return nil, fmt.Errorf("%w: no plugin name", ErrInvalidMsgData)
+			result.Rtn = 1
+			result.Message = fmt.Sprintf(
+				"%+v: no plugin name", ErrInvalidMsgData,
+			)
+			break
 		}
+
 		config, exist := cmd.KwArgs["config"]
 		if !exist {
-			return nil, fmt.Errorf("%w: no plugin config", ErrInvalidMsgData)
+			result.Rtn = 1
+			result.Message = fmt.Sprintf(
+				"%+v: no plugin config", ErrInvalidMsgData,
+			)
+			break
 		}
 		libDir, exist := cmd.KwArgs["lib"]
 		if !exist {
-			return nil, fmt.Errorf("%w: no plugin base dir", ErrInvalidMsgData)
+			result.Rtn = 1
+			result.Message = fmt.Sprintf(
+				"%+v: no plugin base dir", ErrInvalidMsgData,
+			)
 		}
 
 		if container, err := libs.NewPlugin(libDir, name); err != nil {
-			return nil, errors.Join(ErrInvalidMsgData, err)
+			result.Rtn = 1
+			result.Message = fmt.Sprintf(
+				"%+v: create plugin failed", err,
+			)
 		} else if err = container.Plugin().Init(svr.ctx, config); err != nil {
-			return nil, errors.Join(ErrInvalidMsgData, err)
+			result.Rtn = 1
+			result.Message = fmt.Sprintf(
+				"%+v: init plugin failed", err,
+			)
 		} else if err = svr.instance.Load().AddReporter(
 			name, func(s *latency4go.State) error {
 				return container.Plugin().ReportFronts(s.AddrList...)
 			},
 		); err != nil {
-			return nil, errors.Join(ErrInvalidMsgData, err)
-		} else {
-			return &Message{
-				msgID:   msgID,
-				msgType: MsgResult,
-				data:    []byte(fmt.Sprintf("plugin[%s] added", name)),
-			}, nil
+			result.Rtn = 1
+			result.Message = fmt.Sprintf(
+				"%+v: add reporter failed", err,
+			)
 		}
 	case "unplugin":
 		name, exist := cmd.KwArgs["plugin"]
 
 		if !exist {
-			return nil, fmt.Errorf("%w: no plugin name", ErrInvalidMsgData)
+			result.Rtn = 1
+			result.Message = "no plugin name"
+			break
 		}
 
 		if err := svr.instance.Load().DelReporter(name); err != nil {
-			return nil, fmt.Errorf(
-				"%w: del reporter from client faield",
-				ErrInvalidMsgData,
+			result.Rtn = 1
+			result.Message = fmt.Sprintf(
+				"%+v: del reporter from client faield", err,
 			)
+			break
 		}
 
 		container, err := libs.GetAndUnRegisterPlugin(name)
 		if err != nil {
 			if container == nil {
-				return nil, errors.Join(ErrInvalidMsgData, err)
+				result.Rtn = 1
+				result.Message = fmt.Sprintf(
+					"%+v: get registered plugin failed", err,
+				)
+				break
 			} else {
 				slog.Warn(
 					"unregister plugin with error",
@@ -337,18 +339,27 @@ func (svr *CtlServer) execute(msgID uint64, cmd *Command) (*Message, error) {
 				)
 			}
 		}
+
 		container.Plugin().Stop()
 		if err = container.Plugin().Join(); err != nil {
-			return nil, errors.Join(ErrInvalidMsgData, err)
+			result.Rtn = 1
+			result.Message = fmt.Sprintf(
+				"%+v: plugin stop failed", err,
+			)
 		}
+	default:
+		result.Rtn = 1
+		result.Message = "unsupported command"
+	}
 
+	if data, err := json.Marshal(result); err != nil {
+		return nil, err
+	} else {
 		return &Message{
 			msgID:   msgID,
 			msgType: MsgResult,
-			data:    []byte(container.String()),
+			data:    data,
 		}, nil
-	default:
-		return nil, errors.New("unsupported command")
 	}
 }
 

@@ -74,6 +74,7 @@ func init() {
 				slog.Any("error", err),
 				slog.String("command", inputCommand),
 			)
+			return
 		}
 
 		switch commands[0] {
