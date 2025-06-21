@@ -13,6 +13,7 @@ type CtlClient interface {
 
 	Start()
 	Command(*Command) error
+	GetCmdSeq() uint64
 }
 
 type ctlBaseClient struct {
@@ -37,4 +38,8 @@ func (c *ctlBaseClient) createCmdMessage(cmd *Command) (*Message, error) {
 		msgType: MsgCommand,
 		data:    cmdData,
 	}, nil
+}
+
+func (c *ctlBaseClient) GetCmdSeq() uint64 {
+	return c.cmdSeq.Load()
 }

@@ -21,7 +21,7 @@ func init() {
 	).SetMaxLines(
 		50,
 	).SetChangedFunc(func() {
-		if client := ctlTuiClient.Load(); client != nil {
+		if client := instance.Load(); client != nil {
 			logView.ScrollToEnd()
 			logView.Highlight("0", "1")
 			client.app.Draw()
@@ -38,7 +38,7 @@ func init() {
 type tuiLogWr struct{}
 
 func (wr *tuiLogWr) Write(data []byte) (int, error) {
-	if ctlTuiClient.Load() != nil {
+	if instance.Load() != nil {
 		logBuffer := bytebufferpool.Get()
 		defer bytebufferpool.Put(logBuffer)
 
@@ -64,10 +64,6 @@ func (wr *tuiLogWr) Write(data []byte) (int, error) {
 				logBuffer.WriteString(color)
 				logBuffer.Write(word[6:])
 				logBuffer.WriteString(`[""][white]`)
-			// case bytes.HasPrefix(word, []byte("msg=")):
-			// 	logBuffer.WriteString(`msg=[gray]`)
-			// 	logBuffer.Write(word[5 : len(word)-1])
-			// 	logBuffer.WriteString(`[white]`)
 			default:
 				logBuffer.Write(word)
 			}

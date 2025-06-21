@@ -12,15 +12,17 @@ import (
 	"github.com/spf13/pflag"
 )
 
+type ctlTuiClient struct {
+	client ctl.CtlClient
+	flags  *pflag.FlagSet
+	cancel context.CancelFunc
+	app    *tview.Application
+}
+
 var (
 	MainLayout = tview.NewFlex()
 
-	ctlTuiClient atomic.Pointer[struct {
-		client ctl.CtlClient
-		flags  *pflag.FlagSet
-		cancel context.CancelFunc
-		app    *tview.Application
-	}]
+	instance atomic.Pointer[ctlTuiClient]
 )
 
 func StartTui(
@@ -43,12 +45,7 @@ func StartTui(
 		return event
 	})
 
-	ctlTuiClient.Store(&struct {
-		client ctl.CtlClient
-		flags  *pflag.FlagSet
-		cancel context.CancelFunc
-		app    *tview.Application
-	}{
+	instance.Store(&ctlTuiClient{
 		client: client,
 		flags:  flags,
 		cancel: cancel,

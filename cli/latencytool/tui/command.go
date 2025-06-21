@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -15,14 +16,20 @@ var commandView = tview.NewInputField()
 func init() {
 	commandView.SetLabel(
 		"Command > ",
+	).SetFieldStyle(
+		tcell.StyleDefault.Foreground(
+			tcell.ColorWhite,
+		).Background(
+			tcell.ColorBlack,
+		),
 	).SetDoneFunc(func(key tcell.Key) {
-		client := ctlTuiClient.Load()
+		client := instance.Load()
 
 		if client == nil {
 			return
 		}
 
-		inputCommand := commandView.GetText()
+		inputCommand := strings.TrimSpace(commandView.GetText())
 		if inputCommand == "" {
 			return
 		}
@@ -59,6 +66,8 @@ func init() {
 		case "query":
 		case "plugin":
 		case "unplugin":
+		case "exit":
+			client.cancel()
 		default:
 			slog.Error(
 				"unsupported command",
@@ -77,6 +86,14 @@ func init() {
 				slog.Any("error", err),
 				slog.String("cmd", commands[0]),
 				slog.Any("args", commands[1:]),
+			)
+		}
+	}).SetFinishedFunc(func(key tcell.Key) {
+		commandView.SetText(" ")
+
+		if client := instance.Load(); client != nil {
+			commandView.SetLabel(
+				fmt.Sprintf("Command[%d] >", client.client.GetCmdSeq()),
 			)
 		}
 	})
