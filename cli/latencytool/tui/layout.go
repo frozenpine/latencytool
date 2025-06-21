@@ -27,9 +27,9 @@ func StartTui(
 	client ctl.CtlClient,
 	flags *pflag.FlagSet,
 	cancel context.CancelFunc,
-	notify <-chan *ctl.Message,
+	start func() <-chan *ctl.Message,
 ) (<-chan struct{}, error) {
-	if client == nil || flags == nil || notify == nil {
+	if client == nil || flags == nil || start == nil {
 		return nil, errors.New("invalid args")
 	}
 
@@ -55,6 +55,8 @@ func StartTui(
 		app:    app,
 	})
 
+	notify := start()
+
 	go app.Run()
 
 	wait := make(chan struct{})
@@ -68,7 +70,7 @@ func StartTui(
 		for msg := range notify {
 			slog.Info(
 				"message return from ctl server",
-				slog.Any("msg", msg),
+				slog.Any("result", msg),
 			)
 		}
 
