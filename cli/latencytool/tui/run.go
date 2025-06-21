@@ -59,7 +59,7 @@ func msgLoop(instance *ctlTuiClient) {
 			}
 
 			switch result.CmdName {
-			case "state", "query":
+			case "state":
 				var rtn latency4go.State
 
 				if err := json.Unmarshal(
