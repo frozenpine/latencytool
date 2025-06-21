@@ -16,8 +16,6 @@ func init() {
 		true,
 	).SetRegions(
 		true,
-	).SetToggleHighlights(
-		true,
 	).SetWordWrap(
 		true,
 	).SetMaxLines(
@@ -25,8 +23,8 @@ func init() {
 	).SetChangedFunc(func() {
 		if client := ctlTuiClient.Load(); client != nil {
 			logView.ScrollToEnd()
-			client.app.Draw()
 			logView.Highlight("0", "1")
+			client.app.Draw()
 		}
 	}).SetBorder(
 		true,
