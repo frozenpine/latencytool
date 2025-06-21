@@ -13,7 +13,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/frozenpine/latency4go/cli/latencytool/libs"
+	"github.com/frozenpine/latency4go/libs"
 	"github.com/pelletier/go-toml/v2"
 	"gitlab.devops.rdrk.com.cn/quant/rem4go/emc"
 )

@@ -88,16 +88,7 @@ and report to trading systems`,
 			if useTui {
 				defer client.Release()
 
-				wait, err := tui.StartTui(
-					client, cmd.Flags(), cmdCancel,
-					func() <-chan *ctl.Message {
-						client.Init(cmdCtx, "ctl client", client.Start)
-
-						_, results := client.Subscribe("ctl client", core.Quick)
-
-						return results
-					},
-				)
+				wait, err := tui.StartTui(client, cmd.Flags(), cmdCancel)
 				if err != nil {
 					return err
 				}

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/frozenpine/latency4go/cli/latencytool/libs"
+	"github.com/frozenpine/latency4go/libs"
 	"gitlab.devops.rdrk.com.cn/quant/yd4go"
 )
 
