@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/frozenpine/latency4go"
 	"github.com/valyala/bytebufferpool"
 )
 
@@ -24,7 +25,7 @@ var (
 	ErrInvalidMsgData = errors.New("invalid msg data")
 )
 
-func getData[T Command | Result | BroadCast](data []byte) (*T, error) {
+func getData[T Command | Result | latency4go.State](data []byte) (*T, error) {
 	var v T
 
 	if err := json.Unmarshal(data, &v); err != nil {
@@ -108,16 +109,16 @@ func (m *Message) GetResult() (result *Result, err error) {
 	return getData[Result](m.data)
 }
 
-func (m *Message) GetBroadCast() (*BroadCast, error) {
+func (m *Message) GetState() (*latency4go.State, error) {
 	if m == nil {
 		return nil, ErrInvalidMsgType
 	}
 
-	if m.msgType != MsgBroadCast {
-		return nil, fmt.Errorf("%w: not a broadcast msg", ErrInvalidMsgType)
+	if m.msgType != MsgBroadCast && (m.msgType == MsgResult && m.msgID > 1) {
+		return nil, fmt.Errorf("%w: not a state msg", ErrInvalidMsgType)
 	}
 
-	return getData[BroadCast](m.data)
+	return getData[latency4go.State](m.data)
 }
 
 func (m *Message) String() string {
@@ -150,5 +151,3 @@ type Result struct {
 	CmdName string
 	Values  values
 }
-
-type BroadCast values

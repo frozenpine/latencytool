@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 
 	"github.com/frozenpine/latency4go/ctl"
@@ -24,6 +25,7 @@ interval: change latency tool query interval
   plugin: add latency reporter plugin
 unplugin: remove reporter plugin from latency tool
 	help: print this help message
+	 top: change TopK view
 	exit: exit ctl client running
 `
 	commandHistory = []string{}
@@ -86,6 +88,17 @@ func init() {
 		case "help":
 			logView.Write([]byte(commandHelp))
 			goto END
+		case "top":
+			v := cmdFlags.Arg(0)
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				slog.Error(
+					"invalid top number",
+				)
+			} else {
+				ChangeTopK(n)
+			}
+			return
 		case "exit":
 			client.cancel()
 			return
@@ -117,9 +130,13 @@ func init() {
 		commandView.SetText("")
 
 		if client := instance.Load(); client != nil {
-			commandView.SetLabel(
-				fmt.Sprintf("Command[%d] > ", client.client.GetCmdSeq()),
-			)
+			if seq := client.client.GetCmdSeq(); seq > 1 {
+				commandView.SetLabel(
+					fmt.Sprintf("Command[%d] > ", seq),
+				)
+			} else {
+				commandView.SetLabel("Command > ")
+			}
 		}
 	})
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"sync/atomic"
+	"time"
 
 	"github.com/frozenpine/latency4go/ctl"
 	"github.com/gdamore/tcell/v2"
@@ -23,6 +24,7 @@ var (
 	MainLayout = tview.NewFlex()
 
 	instance atomic.Pointer[ctlTuiClient]
+	updateTs atomic.Pointer[time.Time]
 )
 
 func StartTui(
@@ -66,26 +68,32 @@ func StartTui(
 
 		for msg := range notify {
 			switch msg.GetType() {
+			case ctl.MsgResult:
+				if msg.GetID() > 1 {
+					slog.Info(
+						"message return from ctl server",
+						slog.Any("result", msg),
+					)
+					continue
+				}
+				// first message must be state
+				fallthrough
 			case ctl.MsgBroadCast:
-				brd, err := msg.GetBroadCast()
+				state, err := msg.GetState()
 				if err != nil {
 					slog.Error(
-						"get broadcast message failed",
+						"get state message failed",
 						slog.Any("error", err),
 					)
 				} else {
 					slog.Info(
-						"latency result notified",
-						slog.Any("timestamp", (*brd)["Timestamp"]),
-						slog.Any("priority", (*brd)["AddrList"]),
-						slog.Any("config", (*brd)["Config"]),
+						"latency state notified",
+						slog.Time("timestamp", state.Timestamp),
+						slog.Any("config", state.Config),
 					)
+					updateTs.Store(&state.Timestamp)
+					SetTopK(state.AddrList...)
 				}
-			case ctl.MsgResult:
-				slog.Info(
-					"message return from ctl server",
-					slog.Any("result", msg),
-				)
 			default:
 				slog.Warn(
 					"unsupported return msg from ctl server",
@@ -107,20 +115,18 @@ func init() {
 		tview.NewFlex().AddItem(
 			addrView, 0, 2, false,
 		).AddItem(
+			frontView, 0, 6, false,
+		).AddItem(
 			tview.NewFlex().SetDirection(
 				tview.FlexRow,
 			).AddItem(
-				frontView, 0, 6, false,
-			),
-			0, 6, false,
-		).AddItem(
-			tview.NewFlex().AddItem(
 				topKView, 0, 5, false,
 			).AddItem(
 				configView, 0, 5, false,
 			),
 			0, 2, false,
-		), 0, 5, false,
+		),
+		0, 5, false,
 	).AddItem(
 		logView, 0, 5, false,
 	).AddItem(
