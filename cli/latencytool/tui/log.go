@@ -29,7 +29,7 @@ func init() {
 	}).SetBorder(
 		true,
 	).SetTitle(
-		"Log",
+		" Log ",
 	).SetTitleAlign(
 		tview.AlignCenter,
 	)

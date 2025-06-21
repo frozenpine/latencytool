@@ -1,13 +1,17 @@
 package latency4go
 
+import "time"
+
 type State struct {
+	Timestamp   time.Time
 	AddrList    []string
 	LatencyList []*ExFrontLatency
 	Config      QueryConfig
 }
 
-func NewState(cfg *QueryConfig, latency []*ExFrontLatency) *State {
+func NewState(ts time.Time, cfg *QueryConfig, latency []*ExFrontLatency) *State {
 	state := State{
+		Timestamp:   ts,
 		LatencyList: make([]*ExFrontLatency, len(latency)),
 		Config:      *cfg,
 	}

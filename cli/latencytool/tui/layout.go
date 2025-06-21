@@ -52,9 +52,9 @@ func StartTui(
 		app:    app,
 	})
 
-	notify := start()
-
 	go app.Run()
+
+	notify := start()
 
 	wait := make(chan struct{})
 

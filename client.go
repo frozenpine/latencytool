@@ -38,6 +38,11 @@ const (
 
 type Reporter func(*State) error
 
+type LatencyReport struct {
+	Timestamp time.Time
+	Latency   []*ExFrontLatency
+}
+
 type LatencyClient struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
@@ -58,7 +63,7 @@ type LatencyClient struct {
 	notify      chan *State
 
 	sinkPath   string
-	lastReport atomic.Pointer[[]*ExFrontLatency]
+	lastReport atomic.Pointer[LatencyReport]
 	reporterWg sync.WaitGroup
 	reporters  sync.Map
 }
@@ -265,23 +270,29 @@ func (c *LatencyClient) queryLatency(cfg *QueryConfig) ([]*ExFrontLatency, error
 }
 
 func (c *LatencyClient) GetLastState() *State {
-	return NewState(c.cfg.Load(), *c.lastReport.Load())
+	report := *c.lastReport.Load()
+	return NewState(report.Timestamp, c.cfg.Load(), report.Latency)
 }
 
-func (c *LatencyClient) sinkLatency(latency []*ExFrontLatency) error {
+func (c *LatencyClient) sinkLatency(ts time.Time, latency []*ExFrontLatency) error {
 	if len(latency) <= 0 {
 		slog.Warn("empty latency result, skip sink")
 
 		return nil
 	}
 
-	c.lastReport.Store(&latency)
+	report := LatencyReport{
+		Timestamp: ts,
+		Latency:   latency,
+	}
+
+	c.lastReport.Store(&report)
 
 	if c.sinkPath == "" {
 		return nil
 	}
 
-	data, err := json.Marshal(latency)
+	data, err := json.Marshal(report)
 	if err != nil {
 		return err
 	}
@@ -340,6 +351,7 @@ func (c *LatencyClient) runQuerier(
 				}
 
 				currCfg := *c.cfg.Load()
+				ts := time.Now()
 				latency, err := c.queryLatency(&currCfg)
 
 				if err != nil {
@@ -352,14 +364,14 @@ func (c *LatencyClient) runQuerier(
 					return
 				}
 
-				if err := c.sinkLatency(latency); err != nil {
+				if err := c.sinkLatency(ts, latency); err != nil {
 					slog.Error(
 						"sink latency list failed",
 						slog.Any("error", err),
 					)
 				}
 
-				state := NewState(&currCfg, latency)
+				state := NewState(ts, &currCfg, latency)
 
 				select {
 				case c.notify <- state:
@@ -516,12 +528,13 @@ func (c *LatencyClient) QueryLatency(kwargs map[string]string) (*State, error) {
 		}
 	}
 
+	ts := time.Now()
 	latency, err := c.queryLatency(&tmpCfg)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewState(&tmpCfg, latency), nil
+	return NewState(ts, &tmpCfg, latency), nil
 }
 
 func (c *LatencyClient) Start(interval time.Duration) (err error) {
