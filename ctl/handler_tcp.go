@@ -69,7 +69,7 @@ func (tcpHdl *CtlTcpHandler) handleConn(conn net.Conn) {
 	tcpHdl.hdlConnections.Store(remoteIdt, wr)
 
 	defer func() {
-		tcpHdl.hdlConnections.Delete(remote)
+		tcpHdl.hdlConnections.Delete(remoteIdt)
 
 		conn.Close()
 	}()

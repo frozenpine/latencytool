@@ -85,22 +85,23 @@ and report to trading systems`,
 				return err
 			}
 
-			if useTui {
-				tui.StartTui(client, cmd.Flags(), cmdCancel)
-			}
-
 			client.Init(cmdCtx, "ctl client", client.Start)
 
 			_, results := client.Subscribe("ctl client", core.Quick)
 
-			for msg := range results {
-				slog.Info(
-					"message return from ctl server",
-					slog.Any("msg", msg),
+			if useTui {
+				defer client.Release()
+
+				wait, err := tui.StartTui(
+					client, cmd.Flags(), cmdCancel, results,
 				)
+				if err != nil {
+					return err
+				}
+
+				<-wait
 			}
 
-			client.Release()
 			client.Join()
 			return nil
 		} else {

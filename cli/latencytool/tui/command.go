@@ -16,60 +16,68 @@ func init() {
 	commandView.SetLabel(
 		"Command > ",
 	).SetDoneFunc(func(key tcell.Key) {
-		if client := ctlClient.Load(); client != nil {
-			inputCommand := commandView.GetText()
-			commands := strings.Split(inputCommand, " ")
-			kwargs := map[string]string{}
+		client := ctlTuiClient.Load()
 
-			cmdFlags := (*client.flags)
+		if client == nil {
+			return
+		}
 
-			if err := cmdFlags.ParseAll(
-				commands[1:],
-				func(flag *pflag.Flag, value string) error {
-					if err := flag.Value.Set(value); err != nil {
-						return err
-					} else {
-						kwargs[flag.Name] = value
-						return nil
-					}
-				},
-			); err != nil {
-				slog.Error(
-					"tui parse commands failed",
-					slog.Any("error", err),
-					slog.String("command", inputCommand),
-				)
-			}
+		inputCommand := commandView.GetText()
+		if inputCommand == "" {
+			return
+		}
 
-			switch commands[0] {
-			case "suspend":
-			case "resume":
-			case "interval":
-			case "state":
-			case "config":
-			case "query":
-			case "plugin":
-			case "unplugin":
-			default:
-				slog.Error(
-					"unsupported command",
-					slog.String("cmd", commands[0]),
-					slog.Any("args", commands[1:]),
-				)
-				return
-			}
+		commands := strings.Split(inputCommand, " ")
+		kwargs := map[string]string{}
 
-			if err := client.client.Command(&ctl.Command{
-				Name:   commands[0],
-				KwArgs: kwargs,
-			}); err != nil {
-				slog.Error(
-					"send command failed",
-					slog.Any("error", err),
-					slog.String("cmd", commands[0]),
-					slog.Any("args", commands[1:]),
-				)
-			}
+		cmdFlags := (*client.flags)
+
+		if err := cmdFlags.ParseAll(
+			commands[1:],
+			func(flag *pflag.Flag, value string) error {
+				if err := flag.Value.Set(value); err != nil {
+					return err
+				} else {
+					kwargs[flag.Name] = value
+					return nil
+				}
+			},
+		); err != nil {
+			slog.Error(
+				"tui parse commands failed",
+				slog.Any("error", err),
+				slog.String("command", inputCommand),
+			)
+		}
+
+		switch commands[0] {
+		case "suspend":
+		case "resume":
+		case "interval":
+		case "state":
+		case "config":
+		case "query":
+		case "plugin":
+		case "unplugin":
+		default:
+			slog.Error(
+				"unsupported command",
+				slog.String("cmd", commands[0]),
+				slog.Any("args", commands[1:]),
+			)
+			return
+		}
+
+		if err := client.client.Command(&ctl.Command{
+			Name:   commands[0],
+			KwArgs: kwargs,
+		}); err != nil {
+			slog.Error(
+				"send command failed",
+				slog.Any("error", err),
+				slog.String("cmd", commands[0]),
+				slog.Any("args", commands[1:]),
+			)
 		}
 	})
 }
