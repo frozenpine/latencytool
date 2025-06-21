@@ -52,9 +52,9 @@ func StartTui(
 		app:    app,
 	})
 
-	go app.Run()
-
 	notify := start()
+
+	go app.Run()
 
 	wait := make(chan struct{})
 
@@ -65,10 +65,33 @@ func StartTui(
 		}()
 
 		for msg := range notify {
-			slog.Info(
-				"message return from ctl server",
-				slog.Any("result", msg),
-			)
+			switch msg.GetType() {
+			case ctl.MsgBroadCast:
+				brd, err := msg.GetBroadCast()
+				if err != nil {
+					slog.Error(
+						"get broadcast message failed",
+						slog.Any("error", err),
+					)
+				} else {
+					slog.Info(
+						"latency result notified",
+						slog.Any("timestamp", (*brd)["Timestamp"]),
+						slog.Any("priority", (*brd)["AddrList"]),
+						slog.Any("config", (*brd)["Config"]),
+					)
+				}
+			case ctl.MsgResult:
+				slog.Info(
+					"message return from ctl server",
+					slog.Any("result", msg),
+				)
+			default:
+				slog.Warn(
+					"unsupported return msg from ctl server",
+					slog.Any("result", msg),
+				)
+			}
 		}
 
 		slog.Info("ctl client message loop exit")
@@ -102,5 +125,9 @@ func init() {
 		logView, 0, 5, false,
 	).AddItem(
 		commandView, 1, 0, true,
-	).SetTitle("LatencyTool").SetTitleAlign(tview.AlignCenter)
+	).SetTitle(
+		"LatencyTool",
+	).SetTitleAlign(
+		tview.AlignCenter,
+	)
 }

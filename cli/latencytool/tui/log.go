@@ -22,8 +22,11 @@ func init() {
 		50,
 	).SetChangedFunc(func() {
 		if client := instance.Load(); client != nil {
+			logView.Lock()
 			logView.ScrollToEnd()
 			logView.Highlight("0", "1")
+			logView.Unlock()
+
 			client.app.Draw()
 		}
 	}).SetBorder(

@@ -113,7 +113,7 @@ func (m *Message) GetBroadCast() (*BroadCast, error) {
 		return nil, ErrInvalidMsgType
 	}
 
-	if m.msgType != MsgResult {
+	if m.msgType != MsgBroadCast {
 		return nil, fmt.Errorf("%w: not a broadcast msg", ErrInvalidMsgType)
 	}
 
