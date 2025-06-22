@@ -66,6 +66,7 @@ func StartTui(
 			SetConfig()
 			return nil
 		},
+		ctl.LogResult,
 		func() error {
 			app.Stop()
 			return nil

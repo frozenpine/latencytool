@@ -16,6 +16,7 @@ import (
 	"syscall"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/frozenpine/latency4go"
@@ -42,6 +43,48 @@ var (
 	errInvalidInstance = errors.New("invalid instance")
 	errInvalidArgs     = errors.New("invalid args")
 )
+
+func consoleExecute(
+	ctx context.Context, client ctl.CtlClient,
+	cmdFlags *pflag.FlagSet, cancel func(),
+) error {
+	defer cancel()
+
+	command, _ := cmdFlags.GetString("cmd")
+	if command == "" {
+		return errors.New("no command specified")
+	}
+
+	client.Init(ctx, "ctl client", client.Start)
+
+	execute := ctl.Command{
+		Name:   command,
+		KwArgs: map[string]string{},
+	}
+
+	// TODO: kwargs parse
+
+	wait := make(chan struct{})
+
+	client.MessageLoop(
+		"console", nil,
+		ctl.LogState,
+		func(r *ctl.Result) error {
+			defer close(wait)
+
+			return ctl.LogResult(r)
+		},
+		nil,
+	)
+
+	if err := client.Command(&execute); err != nil {
+		return err
+	}
+
+	<-wait
+
+	return nil
+}
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -85,47 +128,17 @@ and report to trading systems`,
 			}
 
 			if useTui {
-				if err := tui.StartTui(
+				err = tui.StartTui(
 					cmdCtx, client, cmd.Flags(), client.Release,
-				); err != nil {
-					return err
-				}
-			} else {
-				defer client.Release()
-
-				cmdFlags := cmd.Flags()
-				command, _ := cmdFlags.GetString("cmd")
-				if command == "" {
-					return errors.New("no command specified")
-				}
-
-				client.Init(cmdCtx, "ctl client", client.Start)
-
-				execute := ctl.Command{
-					Name:   command,
-					KwArgs: map[string]string{},
-				}
-
-				// TODO:
-
-				client.MessageLoop(
-					"console", nil,
-					func(s *latency4go.State) error {
-						return nil
-					}, nil,
 				)
-
-				if err := client.Command(&execute); err != nil {
-					slog.Error(
-						"command execute failed",
-						slog.Any("error", err),
-						slog.Any("cmd", execute),
-					)
-				}
+			} else {
+				err = consoleExecute(
+					cmdCtx, client, cmd.Flags(), client.Release,
+				)
 			}
 
 			client.Join()
-			return nil
+			return err
 		} else {
 			return cmd.Help()
 		}

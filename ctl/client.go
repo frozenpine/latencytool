@@ -3,7 +3,6 @@ package ctl
 import (
 	"encoding/json"
 	"log/slog"
-	"slices"
 	"sync/atomic"
 
 	"github.com/frozenpine/latency4go"
@@ -21,6 +20,7 @@ type CtlClient interface {
 		name string,
 		preRun func() error,
 		handleState func(*latency4go.State) error,
+		handleResult func(*Result) error,
 		postRun func() error,
 	) error
 }
@@ -57,12 +57,17 @@ func (c *ctlBaseClient) MessageLoop(
 	name string,
 	preRun func() error,
 	handleState func(*latency4go.State) error,
+	handleResult func(*Result) error,
 	postRun func() error,
 ) error {
 	if preRun != nil {
 		if err := preRun(); err != nil {
 			return err
 		}
+	}
+
+	if handleResult == nil {
+		handleResult = LogResult
 	}
 
 	go func() {
@@ -129,39 +134,13 @@ func (c *ctlBaseClient) MessageLoop(
 
 					state = &rtn
 				default:
-					values := map[string]any{}
-					keys := make([]string, 0, len(result.Values))
-
-					for k, v := range result.Values {
-						var value any
-
-						if err := json.Unmarshal(
-							v.(json.RawMessage), &value,
-						); err != nil {
-							slog.Error(
-								"unmarshal result values failed",
-								slog.Any("error", err),
-								slog.String("key", k),
-							)
-						} else {
-							values[k] = value
-						}
-
-						keys = append(keys, k)
+					if err := handleResult(result); err != nil {
+						slog.Error(
+							"handle result failed",
+							slog.Any("error", err),
+							slog.String("name", name),
+						)
 					}
-
-					slices.Sort(keys)
-					attrs := append(
-						[]any{slog.String("cmd", result.CmdName)},
-						latency4go.ConvertSlice(keys, func(k string) any {
-							return slog.Any(k, values[k])
-						})...,
-					)
-
-					slog.Info(
-						"command result received",
-						attrs...,
-					)
 					continue
 				}
 			case MsgBroadCast:

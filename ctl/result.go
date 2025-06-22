@@ -1,6 +1,12 @@
 package ctl
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"log/slog"
+	"slices"
+
+	"github.com/frozenpine/latency4go"
+)
 
 type Result struct {
 	Rtn     int
@@ -37,6 +43,56 @@ func (r *Result) UnmarshalJSON(v []byte) error {
 	for k, v := range values {
 		r.Values[k] = v
 	}
+
+	return nil
+}
+
+var LogResult = func(result *Result) error {
+	values := map[string]any{}
+	keys := make([]string, 0, len(result.Values))
+
+	for k, v := range result.Values {
+		var value any
+
+		if err := json.Unmarshal(
+			v.(json.RawMessage), &value,
+		); err != nil {
+			slog.Error(
+				"unmarshal result values failed",
+				slog.Any("error", err),
+				slog.String("key", k),
+			)
+		} else {
+			values[k] = value
+		}
+
+		keys = append(keys, k)
+	}
+
+	slices.Sort(keys)
+	attrs := append(
+		[]any{slog.String("cmd", result.CmdName)},
+		latency4go.ConvertSlice(keys, func(k string) any {
+			return slog.Any(k, values[k])
+		})...,
+	)
+
+	slog.Info(
+		"command result received",
+		attrs...,
+	)
+
+	return nil
+}
+
+var LogState = func(state *latency4go.State) error {
+	slog.Info(
+		"latency state notified",
+		slog.Time("update_ts", state.Timestamp),
+		slog.String("config", state.Config.String()),
+		slog.Any("latency", state.LatencyList),
+		slog.Any("priority", state.AddrList),
+	)
 
 	return nil
 }
