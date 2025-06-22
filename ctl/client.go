@@ -67,6 +67,14 @@ func (c *ctlBaseClient) MessageLoop(
 		}
 	}
 
+	if handleState == nil {
+		handleState = LogState
+	}
+
+	if handleResult == nil {
+		handleResult = LogResult
+	}
+
 	go func() {
 		subId, notify := c.Subscribe(name, core.Quick)
 
@@ -106,7 +114,9 @@ func (c *ctlBaseClient) MessageLoop(
 					continue
 				}
 
-				if result.Rtn != 0 {
+				if handleResult != nil {
+					err = handleResult(result)
+				} else if result.Rtn != 0 {
 					slog.Error(
 						"command execution failed",
 						slog.String("cmd", result.CmdName),
@@ -115,15 +125,12 @@ func (c *ctlBaseClient) MessageLoop(
 					continue
 				}
 
-				// 第一笔默认发送 `state` 命令不会调
-				if handleResult != nil && msg.msgID > 1 {
-					if err := handleResult(result); err != nil {
-						slog.Error(
-							"handle result failed",
-							slog.Any("error", err),
-							slog.String("name", name),
-						)
-					}
+				if err != nil {
+					slog.Error(
+						"message loop handle result failed",
+						slog.Any("error", err),
+						slog.String("name", name),
+					)
 				}
 
 				switch result.CmdName {
@@ -131,7 +138,7 @@ func (c *ctlBaseClient) MessageLoop(
 					var rtn latency4go.State
 
 					if err := json.Unmarshal(
-						result.Values["state"].(json.RawMessage), &rtn,
+						result.Values["State"].(json.RawMessage), &rtn,
 					); err != nil {
 						slog.Error(
 							"unmarshal state failed",

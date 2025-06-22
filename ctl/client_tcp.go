@@ -44,11 +44,11 @@ func (c *CtlTcpClient) Start() {
 	go c.recv()
 
 	if err := c.Command(&Command{
-		Name: "state",
+		Name: "info",
 	}); err != nil {
-		slog.Error("make initial start command failed", slog.Any("error", err))
+		slog.Error("make initial info command failed", slog.Any("error", err))
 	} else {
-		slog.Info("initial command sended")
+		slog.Info("initial info command sended")
 	}
 }
 

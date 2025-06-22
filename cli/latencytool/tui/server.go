@@ -1,6 +1,10 @@
 package tui
 
 import (
+	"fmt"
+	"log/slog"
+	"time"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -8,7 +12,6 @@ import (
 var (
 	ctlSvrView = tview.NewFlex()
 	summary    = tview.NewTextView()
-	configNode = tview.NewTreeNode("Config")
 	periodNode = tview.NewTreeNode("Period")
 	pluginNode = tview.NewTreeNode("Plugins")
 	infoNodes  = tview.NewTreeView()
@@ -34,15 +37,44 @@ func init() {
 	root := tview.NewTreeNode(
 		"CtlServer",
 	).Expand().AddChild(
-		periodNode.SetColor(tcell.ColorDarkRed).Expand(),
+		periodNode.SetColor(
+			tcell.ColorDarkRed,
+		).Expand(),
 	).AddChild(
-		configNode.SetColor(tcell.ColorLightBlue).SetSelectable(true),
-	).AddChild(
-		pluginNode.SetColor(tcell.ColorDarkOrange).SetSelectable(true),
+		pluginNode.SetColor(
+			tcell.ColorDarkOrange,
+		).SetSelectable(true),
 	)
 	root.SetColor(tcell.ColorLightGreen).SetSelectable(true)
 
-	infoNodes.SetRoot(root).SetTitle(
+	infoNodes.SetRoot(
+		root,
+	).SetSelectedFunc(func(node *tview.TreeNode) {
+		ref := node.GetReference()
+		if ref == nil {
+			return
+		}
+
+		switch node.GetText() {
+		case "Period":
+			interv, ok := ref.(time.Duration)
+			if !ok {
+				slog.Error(
+					"invalid reference for Config node",
+					slog.Any("ref", ref),
+				)
+				return
+			}
+
+			node.ClearChildren()
+			node.AddChild(
+				tview.NewTreeNode(
+					fmt.Sprintf("Interval: %s", interv.String()),
+				),
+			)
+		case "Plugins":
+		}
+	}).SetTitle(
 		" Info ",
 	).SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {

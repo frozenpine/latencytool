@@ -2,6 +2,7 @@ package libs
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"runtime"
@@ -61,6 +62,14 @@ func (c *PluginContainer) String() string {
 	buff.WriteString("}")
 
 	return buff.String()
+}
+
+func (c *PluginContainer) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]any{
+		"PluginType": c.pluginType,
+		"Name":       c.name,
+		"LibDir":     c.libDir,
+	})
 }
 
 var (

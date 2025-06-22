@@ -2,9 +2,11 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"sync/atomic"
+	"time"
 
 	"github.com/frozenpine/latency4go"
 	"github.com/frozenpine/latency4go/ctl"
@@ -21,21 +23,26 @@ type ctlTuiClient struct {
 }
 
 var (
-	instance       atomic.Pointer[ctlTuiClient]
-	lastState      atomic.Pointer[latency4go.State]
-	stateCallbacks []func(*latency4go.State)
+	instance  atomic.Pointer[ctlTuiClient]
+	lastState atomic.Pointer[latency4go.State]
 )
 
-func setState(state *latency4go.State) *latency4go.State {
+func handleState(state *latency4go.State) error {
 	if state == nil {
 		return nil
 	}
 
-	old := lastState.Swap(state)
-	for _, fn := range stateCallbacks {
-		fn(state)
-	}
-	return old
+	history.Load().append(lastState.Swap(state))
+	SetTopK()
+	SetConfig()
+
+	slog.Info(
+		"latency state notified",
+		slog.Time("update_ts", state.Timestamp),
+		slog.Any("priority", state.AddrList),
+		slog.String("config", state.Config.String()),
+	)
+	return nil
 }
 
 func StartTui(
@@ -81,22 +88,27 @@ func StartTui(
 
 	client.MessageLoop(
 		"tui loop", nil,
-		func(state *latency4go.State) error {
-			if history.Load().append(setState(state)) {
-				SetTopK()
-				SetConfig()
-			}
-
-			slog.Info(
-				"latency state notified",
-				slog.Time("update_ts", state.Timestamp),
-				slog.Any("priority", state.AddrList),
-				slog.String("config", state.Config.String()),
-			)
-			return nil
-		},
+		handleState,
 		func(r *ctl.Result) error {
-			if r.CmdName == "state" {
+			if r.CmdName == "info" {
+				slog.Info("info result arrived")
+
+				var state latency4go.State
+				if err := json.Unmarshal(
+					r.Values["State"].(json.RawMessage), &state,
+				); err != nil {
+					return err
+				} else if err := handleState(&state); err != nil {
+					return err
+				}
+
+				var interval time.Duration
+				if err := json.Unmarshal(
+					r.Values["Interval"].(json.RawMessage), &interval,
+				); err != nil {
+					return err
+				}
+
 				return nil
 			}
 

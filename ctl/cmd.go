@@ -56,13 +56,13 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 		}
 
 		result.Values = map[string]any{
-			"origin": rtn.String(),
-			"new":    intv.String(),
+			"Origin": rtn.String(),
+			"New":    intv.String(),
 		}
 	case "state":
 		if state := svr.instance.Load().GetLastState(); state != nil {
 			result.Values = map[string]any{
-				"state": state,
+				"State": state,
 			}
 		} else {
 			result.Rtn = 1
@@ -93,7 +93,7 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 		}
 
 		result.Values = map[string]any{
-			"state": state,
+			"State": state,
 		}
 	case "plugin":
 		name, exist := cmd.KwArgs["plugin"]
@@ -181,9 +181,27 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 				"%+v: plugin stop failed", err,
 			)
 		}
-	case "show":
-		// TODO
-		fallthrough
+	case "info":
+		if state := svr.instance.Load().GetLastState(); state != nil {
+			result.Values = map[string]any{
+				"State": state,
+			}
+		} else {
+			result.Rtn = 1
+			result.Message = "get last state failed"
+		}
+
+		interval := svr.instance.Load().GetInterval()
+
+		plugins := []*libs.PluginContainer{}
+
+		libs.RangePlugins(func(name string, container *libs.PluginContainer) error {
+			plugins = append(plugins, container)
+			return nil
+		})
+
+		result.Values["Interval"] = interval
+		result.Values["Plugins"] = plugins
 	default:
 		result.Rtn = 1
 		result.Message = "unsupported command"

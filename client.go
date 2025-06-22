@@ -543,6 +543,10 @@ func (c *LatencyClient) GetConfig() *QueryConfig {
 	return c.cfg.Load().Clone()
 }
 
+func (c *LatencyClient) GetInterval() time.Duration {
+	return *c.qryInterval.Load()
+}
+
 func (c *LatencyClient) QueryLatency(kwargs map[string]string) (*State, error) {
 	var tmpCfg QueryConfig = *c.cfg.Load().Clone()
 

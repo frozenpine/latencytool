@@ -26,7 +26,7 @@ Available commands:
    query: query latency result with onetime config
   plugin: add latency reporter plugin
 unplugin: remove reporter plugin from latency tool
-    show: show latency tool info
+    info: get latency tool info
 ----------------- Local Commands ------------------
 	help: print this help message
 	 top: change TopK view
@@ -156,6 +156,7 @@ func init() {
 		case "state":
 		case "config":
 		case "query":
+		case "info":
 		case "plugin":
 		case "unplugin":
 		case "help":
