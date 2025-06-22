@@ -226,43 +226,75 @@ func (tr *TimeRange) Set(v string) error {
 		*tr = make(TimeRange)
 	}
 
-	pairs := ConvertSlice(
-		strings.Split(v, TIMERANGE_KW_SPLIT),
-		func(v string) string {
-			return strings.TrimSpace(v)
-		},
-	)
+	if strings.Contains(v, "~") {
+		timeRange := ConvertSlice(strings.SplitN(
+			strings.Trim(v, "[]"),
+			"~", 2,
+		), func(v string) string { return strings.TrimSpace(v) })
 
-	for _, kv := range pairs {
-		values := strings.SplitN(kv, "=", 2)
+		if len(timeRange) != 2 {
+			return errors.New("invalid time range string")
+		}
 
-		if len(values) != 2 {
-			// support for single before arg
-			(*tr)[TimeBefore] = values[0]
+		if timeRange[1] == "now" && strings.HasPrefix(timeRange[0], "now-") {
+			(*tr)[TimeBefore] = strings.TrimPrefix(timeRange[0], "now-")
 		} else {
-			key := timeRangeKey(values[0])
-			value := values[1]
-
-			switch key {
-			case TimeBefore:
-				// TODO: elastic duration string check
-			case TimeFrom, TimeTo:
-				v, err := time.ParseInLocation(
-					"2006-01-02T15:04:05", value, time.Local,
-				)
-
-				if err != nil {
-					return errors.Join(errInvalidTimeRangeArg, err)
-				}
-
-				value = v.Format(time.RFC3339)
-			case TimeBucket, TimeBucketSize:
-
-			default:
-				return errInvalidTimeRangeArg
+			if _, err := time.ParseInLocation(
+				"2006-01-02T15:04:05", timeRange[0], time.Local,
+			); err != nil {
+				return err
+			} else {
+				(*tr)[TimeFrom] = timeRange[0]
 			}
 
-			(*tr)[key] = value
+			if _, err := time.ParseInLocation(
+				"2006-01-02T15:04:05", timeRange[1], time.Local,
+			); err != nil {
+				return err
+			} else {
+				(*tr)[TimeTo] = timeRange[1]
+			}
+		}
+	} else {
+
+		pairs := ConvertSlice(
+			strings.Split(v, TIMERANGE_KW_SPLIT),
+			func(v string) string {
+				return strings.TrimSpace(v)
+			},
+		)
+
+		for _, kv := range pairs {
+			values := strings.SplitN(kv, "=", 2)
+
+			if len(values) != 2 {
+				// support for single before arg
+				(*tr)[TimeBefore] = values[0]
+			} else {
+				key := timeRangeKey(values[0])
+				value := values[1]
+
+				switch key {
+				case TimeBefore:
+					// TODO: elastic duration string check
+				case TimeFrom, TimeTo:
+					v, err := time.ParseInLocation(
+						"2006-01-02T15:04:05", value, time.Local,
+					)
+
+					if err != nil {
+						return errors.Join(errInvalidTimeRangeArg, err)
+					}
+
+					value = v.Format(time.RFC3339)
+				case TimeBucket, TimeBucketSize:
+
+				default:
+					return errInvalidTimeRangeArg
+				}
+
+				(*tr)[key] = value
+			}
 		}
 	}
 
@@ -559,7 +591,7 @@ func (cfg *QueryConfig) SetConfig(key, value string) error {
 	case "sort":
 		cfg.SortBy = value
 	default:
-		return errors.New("unsupported config key")
+		return fmt.Errorf("unsupported config key: %s", key)
 	}
 
 	return nil

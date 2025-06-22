@@ -51,16 +51,17 @@ type LatencyClient struct {
 	addr   string
 	client atomic.Pointer[elastic.Client]
 
-	startOnce   sync.Once
-	stopOnce    sync.Once
-	runCtx      context.Context
-	runCancel   context.CancelFunc
-	watchRun    chan error
-	cfg         atomic.Pointer[QueryConfig]
-	qryInterval atomic.Pointer[time.Duration]
-	suspend     atomic.Bool
-	suspendWg   sync.WaitGroup
-	notify      chan *State
+	startOnce      sync.Once
+	stopOnce       sync.Once
+	runCtx         context.Context
+	runCancel      context.CancelFunc
+	watchRun       chan error
+	cfg            atomic.Pointer[QueryConfig]
+	qryInterval    atomic.Pointer[time.Duration]
+	intervalChange chan struct{}
+	suspend        atomic.Bool
+	suspendWg      sync.WaitGroup
+	notify         chan *State
 
 	sinkPath   string
 	lastReport atomic.Pointer[LatencyReport]
@@ -144,6 +145,7 @@ func (c *LatencyClient) Init(
 		c.client.Store(client)
 		c.cfg.Store(config)
 		c.sinkPath = sinkPath
+		c.intervalChange = make(chan struct{})
 	})
 
 	return
@@ -174,6 +176,11 @@ func (c *LatencyClient) queryLatency(cfg *QueryConfig) ([]*ExFrontLatency, error
 	).Do(qryCtx)
 
 	if err != nil {
+		slog.Error(
+			"query latency failed",
+			slog.Any("error", err),
+			slog.Any("rsp", rsp),
+		)
 		return nil, errors.Join(ErrReadResponse, err)
 	}
 
@@ -320,10 +327,16 @@ func (c *LatencyClient) Resume() bool {
 
 func (c *LatencyClient) ChangeInterval(interv time.Duration) time.Duration {
 	if interv <= 0 {
+		slog.Warn(
+			"invalid query interval",
+			slog.Duration("interval", interv),
+		)
 		return interv
 	}
 
-	return *c.qryInterval.Swap(&interv)
+	old := *c.qryInterval.Swap(&interv)
+	c.intervalChange <- struct{}{}
+	return old
 }
 
 func (c *LatencyClient) runQuerier(
@@ -397,6 +410,11 @@ func (c *LatencyClient) runQuerier(
 				case <-c.runCtx.Done():
 					c.cancelRun("current query context done")
 					return
+				case <-c.intervalChange:
+					slog.Info(
+						"query interval changed",
+						slog.Duration("interval", *c.qryInterval.Load()),
+					)
 				case <-time.After(interval):
 				}
 			}
@@ -505,9 +523,15 @@ func (c *LatencyClient) SetConfig(data map[string]string) error {
 	}
 
 	tmpCfg := *c.cfg.Load()
-	for k, v := range data {
-		if err := tmpCfg.SetConfig(k, v); err != nil {
+	if cfg, exists := data["config"]; exists {
+		if err := json.Unmarshal([]byte(cfg), &tmpCfg); err != nil {
 			return err
+		}
+	} else {
+		for k, v := range data {
+			if err := tmpCfg.SetConfig(k, v); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -522,9 +546,15 @@ func (c *LatencyClient) GetConfig() QueryConfig {
 func (c *LatencyClient) QueryLatency(kwargs map[string]string) (*State, error) {
 	tmpCfg := *c.cfg.Load()
 
-	for k, v := range kwargs {
-		if err := tmpCfg.SetConfig(k, v); err != nil {
+	if cfg, exists := kwargs["config"]; exists {
+		if err := json.Unmarshal([]byte(cfg), &tmpCfg); err != nil {
 			return nil, err
+		}
+	} else {
+		for k, v := range kwargs {
+			if err := tmpCfg.SetConfig(k, v); err != nil {
+				return nil, err
+			}
 		}
 	}
 

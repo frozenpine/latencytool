@@ -5,12 +5,14 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -62,7 +64,67 @@ func consoleExecute(
 		KwArgs: map[string]string{},
 	}
 
-	// TODO: kwargs parse
+	switch command {
+	case "suspend":
+	case "resume":
+	case "period":
+		if cmdFlags.Changed("interval") {
+			interv, _ := cmdFlags.GetDuration("interval")
+			execute.KwArgs["interval"] = interv.String()
+		} else {
+			return errors.Join(
+				errInvalidArgs,
+				errors.New("invalid interval"),
+			)
+		}
+	case "state":
+	case "query":
+		data, err := json.Marshal(config)
+		if err != nil {
+			return err
+		}
+		execute.KwArgs["config"] = string(data)
+	case "config":
+		if cmdFlags.Changed("before") {
+			execute.KwArgs["before"] = config.TimeRange.String()
+		}
+
+		if cmdFlags.Changed("range") {
+			execute.KwArgs["range"] = config.TimeRange.String()
+		}
+
+		if cmdFlags.Changed("from") {
+			execute.KwArgs["from"] = strconv.Itoa(config.Tick2Order.From)
+		}
+
+		if cmdFlags.Changed("to") {
+			execute.KwArgs["to"] = strconv.Itoa(config.Tick2Order.To)
+		}
+
+		if cmdFlags.Changed("percents") {
+			execute.KwArgs["percents"] = config.Quantile.String()
+		}
+
+		if cmdFlags.Changed("agg") {
+			execute.KwArgs["agg"] = strconv.Itoa(config.AggSize)
+		}
+
+		if cmdFlags.Changed("least") {
+			execute.KwArgs["least"] = strconv.Itoa(config.AggCount)
+		}
+
+		if cmdFlags.Changed("user") {
+			execute.KwArgs["user"] = config.Users.String()
+		}
+
+		if cmdFlags.Changed("sort") {
+			execute.KwArgs["sort"] = config.SortBy
+		}
+	case "plugin":
+	case "unplugin":
+	default:
+		return errors.New("unsupported command")
+	}
 
 	wait := make(chan struct{})
 
