@@ -48,9 +48,9 @@ func (wr *tuiLogWr) Write(data []byte) (int, error) {
 		for word := range bytes.FieldsSeq(data) {
 			switch {
 			case bytes.HasPrefix(word, []byte("time=")):
-				logBuffer.WriteString(`time=["0"]`)
+				logBuffer.WriteString(`time=["0"][gray]`)
 				logBuffer.Write(word[5:])
-				logBuffer.WriteString(`[""]`)
+				logBuffer.WriteString(`[""][white]`)
 			case bytes.HasPrefix(word, []byte("level=")):
 				logBuffer.WriteString(`level=["1"]`)
 				var color string

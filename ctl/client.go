@@ -15,13 +15,13 @@ type CtlClient interface {
 	core.Consumer[*Message]
 
 	Start()
-	Command(*Command) error
+	Command(cmd *Command) error
 	GetCmdSeq() uint64
 	MessageLoop(
-		string,
-		func() error,
-		func(*latency4go.State) error,
-		func() error,
+		name string,
+		preRun func() error,
+		handleState func(*latency4go.State) error,
+		postRun func() error,
 	) error
 }
 
@@ -65,15 +65,15 @@ func (c *ctlBaseClient) MessageLoop(
 		}
 	}
 
-	subId, notify := c.Subscribe(name, core.Quick)
-
-	slog.Info(
-		"message loop get new subscribe",
-		slog.Any("name", name),
-		slog.String("sub_id", subId.String()),
-	)
-
 	go func() {
+		subId, notify := c.Subscribe(name, core.Quick)
+
+		slog.Info(
+			"message loop get new subscribe",
+			slog.Any("name", name),
+			slog.String("sub_id", subId.String()),
+		)
+
 		defer func() {
 			c.UnSubscribe(subId)
 
@@ -185,6 +185,7 @@ func (c *ctlBaseClient) MessageLoop(
 			if state != nil {
 				slog.Info(
 					"latency state notified",
+					slog.String("name", name),
 					slog.Time("timestamp", state.Timestamp),
 					slog.Any("config", state.Config),
 				)

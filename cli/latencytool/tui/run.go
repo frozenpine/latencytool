@@ -15,9 +15,8 @@ import (
 type ctlTuiClient struct {
 	client ctl.CtlClient
 	flags  *pflag.FlagSet
-	cancel context.CancelFunc
+	cancel func()
 	app    *tview.Application
-	wait   chan struct{}
 }
 
 var (
@@ -26,33 +25,41 @@ var (
 )
 
 func StartTui(
-	client ctl.CtlClient,
-	flags *pflag.FlagSet,
-	cancel context.CancelFunc,
-) (<-chan struct{}, error) {
+	ctx context.Context, client ctl.CtlClient,
+	flags *pflag.FlagSet, cancel func(),
+) error {
 	if client == nil || flags == nil {
-		return nil, errors.New("invalid args")
+		return errors.New("invalid args")
 	}
 
 	app := tview.NewApplication().SetRoot(
 		MainLayout, true,
-	).SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	)
+	exitFn := func() {
+		app.Stop()
+		cancel()
+	}
+	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyCtrlC:
-			cancel()
+			exitFn()
 		}
 		return event
 	})
 
-	wait := make(chan struct{})
 	tuiClient := &ctlTuiClient{
 		client: client,
 		flags:  flags,
-		cancel: cancel,
+		cancel: exitFn,
 		app:    app,
 	}
+	instance.Store(tuiClient)
+	go app.Run()
+
+	client.Init(ctx, "ctl client", client.Start)
+
 	client.MessageLoop(
-		"tui loogp", nil,
+		"tui loop", nil,
 		func(state *latency4go.State) error {
 			lastState.Store(state)
 			SetTopK()
@@ -61,14 +68,9 @@ func StartTui(
 		},
 		func() error {
 			app.Stop()
-			close(wait)
 			return nil
 		},
 	)
 
-	instance.Store(tuiClient)
-
-	go app.Run()
-
-	return wait, nil
+	return nil
 }

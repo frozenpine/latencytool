@@ -85,17 +85,43 @@ and report to trading systems`,
 			}
 
 			if useTui {
-				defer client.Release()
-
-				wait, err := tui.StartTui(client, cmd.Flags(), cmdCancel)
-				if err != nil {
+				if err := tui.StartTui(
+					cmdCtx, client, cmd.Flags(), client.Release,
+				); err != nil {
 					return err
 				}
-
-				<-wait
 			} else {
+				defer client.Release()
+
+				cmdFlags := cmd.Flags()
+				command, _ := cmdFlags.GetString("cmd")
+				if command == "" {
+					return errors.New("no command specified")
+				}
+
 				client.Init(cmdCtx, "ctl client", client.Start)
 
+				execute := ctl.Command{
+					Name:   command,
+					KwArgs: map[string]string{},
+				}
+
+				// TODO:
+
+				client.MessageLoop(
+					"console", nil,
+					func(s *latency4go.State) error {
+						return nil
+					}, nil,
+				)
+
+				if err := client.Command(&execute); err != nil {
+					slog.Error(
+						"command execute failed",
+						slog.Any("error", err),
+						slog.Any("cmd", execute),
+					)
+				}
 			}
 
 			client.Join()
