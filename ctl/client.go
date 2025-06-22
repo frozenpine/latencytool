@@ -118,6 +118,14 @@ func (c *ctlBaseClient) MessageLoop(
 					continue
 				}
 
+				if err := handleResult(result); err != nil {
+					slog.Error(
+						"handle result failed",
+						slog.Any("error", err),
+						slog.String("name", name),
+					)
+				}
+
 				switch result.CmdName {
 				case "state":
 					var rtn latency4go.State
@@ -134,13 +142,6 @@ func (c *ctlBaseClient) MessageLoop(
 
 					state = &rtn
 				default:
-					if err := handleResult(result); err != nil {
-						slog.Error(
-							"handle result failed",
-							slog.Any("error", err),
-							slog.String("name", name),
-						)
-					}
 					continue
 				}
 			case MsgBroadCast:
