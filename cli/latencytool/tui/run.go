@@ -21,9 +21,22 @@ type ctlTuiClient struct {
 }
 
 var (
-	instance  atomic.Pointer[ctlTuiClient]
-	lastState atomic.Pointer[latency4go.State]
+	instance       atomic.Pointer[ctlTuiClient]
+	lastState      atomic.Pointer[latency4go.State]
+	stateCallbacks []func(*latency4go.State)
 )
+
+func setState(state *latency4go.State) *latency4go.State {
+	if state == nil {
+		return nil
+	}
+
+	old := lastState.Swap(state)
+	for _, fn := range stateCallbacks {
+		fn(state)
+	}
+	return old
+}
 
 func StartTui(
 	ctx context.Context, client ctl.CtlClient,
@@ -45,6 +58,12 @@ func StartTui(
 		case tcell.KeyCtrlC:
 			commandView.SetText("")
 			return nil
+		case tcell.KeyTab:
+			if commandView.HasFocus() {
+				app.SetFocus(infoNodes)
+			} else {
+				app.SetFocus(commandView)
+			}
 		}
 		return event
 	})
@@ -63,10 +82,10 @@ func StartTui(
 	client.MessageLoop(
 		"tui loop", nil,
 		func(state *latency4go.State) error {
-			history.Load().Append(lastState.Swap(state))
-
-			SetTopK()
-			SetConfig()
+			if history.Load().append(setState(state)) {
+				SetTopK()
+				SetConfig()
+			}
 
 			slog.Info(
 				"latency state notified",

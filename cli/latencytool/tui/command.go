@@ -15,21 +15,91 @@ import (
 var (
 	commandView = tview.NewInputField()
 
-	commandHelp = `Available commands:
------------------ Remote Commands ------------------
- suspend: suspend latency client running
-  resume: resume suspended latency client
+	commandHelp = `
+Available commands:
+--------------- Remote Commands -------------------
+ suspend: suspend latency tool running
+  resume: resume suspended latency tool
   period: change latency tool query period
-   state: query latency tool last state
+   state: get latency tool last state
   config: change latency tool query config
    query: query latency result with onetime config
   plugin: add latency reporter plugin
 unplugin: remove reporter plugin from latency tool
+    show: show latency tool info
 ----------------- Local Commands ------------------
 	help: print this help message
 	 top: change TopK view
 	exit: exit ctl client running
+
 `
+
+	suspendDetail = `
+Commnad > suspend ↵
+
+`
+	resumeDetail = `
+Commnad > resume ↵
+
+`
+	periodDetail = `
+Commnad > period --interval {duration} ↵
+
+`
+	stateDetail = `
+Commnad > state ↵
+
+`
+	configDetail = `
+Commnad > config [--before {duration}] [--range {from=YYYY-mm-ddTHH:MM:SS[,to=YYYY-mm-ddTHH:MM:SS]}]
+                 [--from {pico sec}] [--to {pico sec}] [--agg {result count}] [--least {agg least count}]
+		         [--sort {parmas.(mid|avg|stdev|sample_stdev) +-*/ ...}]
+		         [--user {client_id}]+ [--percents {quantile}]+ ↵
+
+`
+	queryDetail = `
+Commnad > query [--before {duration}] [--range {from=YYYY-mm-ddTHH:MM:SS[,to=YYYY-mm-ddTHH:MM:SS]}]
+                [--from {pico sec}] [--to {pico sec}] [--agg {result count}] [--least {agg least count}]
+		        [--sort {parmas.(mid|avg|stdev|sample_stdev) +-*/ ...}]
+		        [--user {client_id}]+ [--percents {quantile}]+ ↵
+
+`
+	pluginDetail = `
+Commnad > plugin --name {plugin_name} --config {plugin_name}={config_file} ↵
+
+`
+	unpluginDetail = `
+Commnad > unplugin --name {plugin_name}	↵
+
+`
+	showDetail = `
+Commnad > show {something} ↵
+
+`
+	topDetail = `
+Commnad > top {N} ↵
+
+`
+	exitDetail = `
+Commnad > exit ↵
+
+`
+
+	commandDetails = map[string]string{
+		"suspend":  suspendDetail,
+		"resume":   resumeDetail,
+		"period":   periodDetail,
+		"state":    stateDetail,
+		"config":   configDetail,
+		"query":    queryDetail,
+		"plugin":   pluginDetail,
+		"unplugin": unpluginDetail,
+		"show":     showDetail,
+		"help":     commandHelp,
+		"top":      topDetail,
+		"exit":     exitDetail,
+	}
+
 	commandHistory = []string{}
 	commandHisIdx  = 0
 )
@@ -89,7 +159,20 @@ func init() {
 		case "plugin":
 		case "unplugin":
 		case "help":
-			logView.Write([]byte(commandHelp))
+			helpCmd := cmdFlags.Arg(0)
+			if helpCmd == "" {
+				logView.Write([]byte(commandHelp))
+			} else {
+				if cmdDetail, exists := commandDetails[helpCmd]; exists {
+					logView.Write([]byte(cmdDetail))
+				} else {
+					slog.Error(
+						"no command detail help found",
+						slog.String("cmd", helpCmd),
+					)
+					logView.Write([]byte(commandHelp))
+				}
+			}
 			goto END
 		case "top":
 			v := cmdFlags.Arg(0)

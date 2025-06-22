@@ -13,15 +13,17 @@ type hisStates struct {
 	history []*latency4go.State
 }
 
-func (h *hisStates) Append(state *latency4go.State) {
+func (h *hisStates) append(state *latency4go.State) bool {
 	if state == nil {
-		return
+		return false
 	}
 
 	h.lock.Lock()
 	defer h.lock.Unlock()
 
 	h.history = append(h.history, state)
+
+	return true
 }
 
 var (
