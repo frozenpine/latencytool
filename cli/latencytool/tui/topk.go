@@ -78,7 +78,7 @@ func SetTopK() {
 
 		topKView.SetTitle(fmt.Sprintf(" Top %d Fronts ", top.Load()))
 		topTs.SetText(fmt.Sprintf(
-			"Update : [\"1\"]%s[\"\"]",
+			"UpdateTime: [\"1\"]%s[\"\"]",
 			state.Timestamp.Local().Format("2006-01-02 15:04:05"),
 		))
 		topTs.Highlight("1")

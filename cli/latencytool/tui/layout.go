@@ -11,9 +11,9 @@ func init() {
 		tview.FlexRow,
 	).AddItem(
 		tview.NewFlex().AddItem(
-			addrView, 0, 3, false,
+			pluginsView, 0, 2, false,
 		).AddItem(
-			frontView, 0, 5, false,
+			frontView, 0, 6, false,
 		).AddItem(
 			tview.NewFlex().SetDirection(
 				tview.FlexRow,

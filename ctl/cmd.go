@@ -181,6 +181,9 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 				"%+v: plugin stop failed", err,
 			)
 		}
+	case "show":
+		// TODO
+		fallthrough
 	default:
 		result.Rtn = 1
 		result.Message = "unsupported command"

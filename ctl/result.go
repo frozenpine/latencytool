@@ -71,13 +71,23 @@ var LogResult = func(result *Result) error {
 
 	slices.Sort(keys)
 	attrs := append(
-		[]any{slog.String("cmd", result.CmdName)},
+		[]any{
+			slog.String("cmd", result.CmdName),
+			slog.String("cmd_msg", result.Message),
+		},
 		latency4go.ConvertSlice(keys, func(k string) any {
 			return slog.Any(k, values[k])
 		})...,
 	)
 
-	slog.Info(
+	var logger func(string, ...any)
+	if result.Rtn == 0 {
+		logger = slog.Info
+	} else {
+		logger = slog.Error
+	}
+
+	logger(
 		"command result received",
 		attrs...,
 	)
