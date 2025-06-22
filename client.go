@@ -539,12 +539,12 @@ func (c *LatencyClient) SetConfig(data map[string]string) error {
 	return nil
 }
 
-func (c *LatencyClient) GetConfig() QueryConfig {
-	return *c.cfg.Load()
+func (c *LatencyClient) GetConfig() *QueryConfig {
+	return c.cfg.Load().Clone()
 }
 
 func (c *LatencyClient) QueryLatency(kwargs map[string]string) (*State, error) {
-	tmpCfg := *c.cfg.Load()
+	var tmpCfg QueryConfig = *c.cfg.Load().Clone()
 
 	if cfg, exists := kwargs["config"]; exists {
 		if err := json.Unmarshal([]byte(cfg), &tmpCfg); err != nil {

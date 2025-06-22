@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -595,4 +596,14 @@ func (cfg *QueryConfig) SetConfig(key, value string) error {
 	}
 
 	return nil
+}
+
+func (cfg *QueryConfig) Clone() *QueryConfig {
+	newCfg := *cfg
+
+	newCfg.Quantile = slices.Clone(cfg.Quantile)
+	newCfg.Users = slices.Clone(cfg.Users)
+	newCfg.TimeRange = maps.Clone(cfg.TimeRange)
+
+	return &newCfg
 }
