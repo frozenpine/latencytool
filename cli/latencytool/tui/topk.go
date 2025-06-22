@@ -17,7 +17,7 @@ var (
 )
 
 func init() {
-	top.Store(3)
+	top.Store(6)
 	topKView.SetDirection(
 		tview.FlexRow,
 	).AddItem(
