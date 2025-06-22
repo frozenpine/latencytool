@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"sync/atomic"
 
 	"github.com/frozenpine/latency4go"
@@ -42,7 +43,8 @@ func StartTui(
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyCtrlC:
-			exitFn()
+			commandView.SetText("")
+			return nil
 		}
 		return event
 	})
@@ -61,12 +63,26 @@ func StartTui(
 	client.MessageLoop(
 		"tui loop", nil,
 		func(state *latency4go.State) error {
-			lastState.Store(state)
+			history.Load().Append(lastState.Swap(state))
+
 			SetTopK()
 			SetConfig()
+
+			slog.Info(
+				"latency state notified",
+				slog.Time("update_ts", state.Timestamp),
+				slog.Any("priority", state.AddrList),
+				slog.String("config", state.Config.String()),
+			)
 			return nil
 		},
-		ctl.LogResult,
+		func(r *ctl.Result) error {
+			if r.CmdName == "state" {
+				return nil
+			}
+
+			return ctl.LogResult(r)
+		},
 		func() error {
 			app.Stop()
 			return nil

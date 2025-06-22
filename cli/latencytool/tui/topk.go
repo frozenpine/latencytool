@@ -18,6 +18,7 @@ var (
 
 func init() {
 	top.Store(6)
+
 	topKView.SetDirection(
 		tview.FlexRow,
 	).AddItem(
@@ -32,6 +33,14 @@ func init() {
 		true,
 	).SetBorderPadding(
 		0, 0, 1, 1,
+	)
+
+	topTs.SetRegions(
+		true,
+	).SetDynamicColors(
+		true,
+	).SetToggleHighlights(
+		true,
 	)
 }
 
@@ -68,12 +77,11 @@ func SetTopK() {
 		}
 
 		topKView.SetTitle(fmt.Sprintf(" Top %d Fronts ", top.Load()))
-		topTs.SetText(
-			fmt.Sprintf(
-				"Update : %s",
-				state.Timestamp.Local().Format("2006-01-02 15:04:05"),
-			),
-		)
+		topTs.SetText(fmt.Sprintf(
+			"Update : [\"1\"]%s[\"\"]",
+			state.Timestamp.Local().Format("2006-01-02 15:04:05"),
+		))
+		topTs.Highlight("1")
 	}
 }
 

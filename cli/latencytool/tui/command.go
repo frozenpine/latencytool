@@ -16,6 +16,7 @@ var (
 	commandView = tview.NewInputField()
 
 	commandHelp = `Available commands:
+----------------- Remote Commands ------------------
  suspend: suspend latency client running
   resume: resume suspended latency client
   period: change latency tool query period
@@ -24,6 +25,7 @@ var (
    query: query latency result with onetime config
   plugin: add latency reporter plugin
 unplugin: remove reporter plugin from latency tool
+----------------- Local Commands ------------------
 	help: print this help message
 	 top: change TopK view
 	exit: exit ctl client running
