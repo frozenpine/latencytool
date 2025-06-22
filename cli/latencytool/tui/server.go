@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -12,18 +11,47 @@ import (
 var (
 	ctlSvrView = tview.NewFlex()
 	summary    = tview.NewTextView()
-	periodNode = tview.NewTreeNode("Period")
+	period     = tview.NewTextView()
 	pluginNode = tview.NewTreeNode("Plugins")
 	infoNodes  = tview.NewTreeView()
 )
+
+func SetInterval(dur time.Duration) {
+	if client := instance.Load(); client != nil {
+		client.app.Lock()
+		period.SetText(fmt.Sprintf(`["1"][orange]%s[""][white]`, dur.String()))
+		period.Highlight("1")
+		client.app.Unlock()
+
+		client.app.Draw()
+	}
+}
+
+func SetSummary(values []string) {
+	if client := instance.Load(); client != nil {
+		client.app.Lock()
+		summary.Clear()
+		for idx, v := range values {
+			if idx > 0 {
+				summary.Write([]byte("\n"))
+			}
+			summary.Write([]byte(v))
+		}
+		client.app.Unlock()
+
+		client.app.Draw()
+	}
+}
 
 func init() {
 	ctlSvrView.SetDirection(
 		tview.FlexRow,
 	).AddItem(
-		summary, 3, 0, false,
+		summary, 0, 3, false,
 	).AddItem(
-		infoNodes, 0, 1, false,
+		period, 3, 0, false,
+	).AddItem(
+		infoNodes, 0, 7, false,
 	).SetTitle(
 		" Ctl Server Info ",
 	).SetTitleAlign(
@@ -32,15 +60,32 @@ func init() {
 		true,
 	).SetBorderPadding(0, 0, 1, 1)
 
-	summary.SetTitle(" Summary ").SetBorder(true)
+	summary.SetTitle(
+		" Summary ",
+	).SetBorder(
+		true,
+	).SetBorderPadding(
+		0, 0, 1, 1,
+	)
+	period.SetDynamicColors(
+		true,
+	).SetRegions(
+		true,
+	).SetTextAlign(
+		tview.AlignCenter,
+	).SetTitle(
+		" Query Interval ",
+	).SetTitleAlign(
+		tview.AlignCenter,
+	).SetBorder(
+		true,
+	).SetBorderPadding(
+		0, 0, 1, 1,
+	)
 
 	root := tview.NewTreeNode(
 		"CtlServer",
 	).Expand().AddChild(
-		periodNode.SetColor(
-			tcell.ColorDarkRed,
-		).Expand(),
-	).AddChild(
 		pluginNode.SetColor(
 			tcell.ColorDarkOrange,
 		).SetSelectable(true),
@@ -56,23 +101,8 @@ func init() {
 		}
 
 		switch node.GetText() {
-		case "Period":
-			interv, ok := ref.(time.Duration)
-			if !ok {
-				slog.Error(
-					"invalid reference for Config node",
-					slog.Any("ref", ref),
-				)
-				return
-			}
-
-			node.ClearChildren()
-			node.AddChild(
-				tview.NewTreeNode(
-					fmt.Sprintf("Interval: %s", interv.String()),
-				),
-			)
 		case "Plugins":
+			// TODO
 		}
 	}).SetTitle(
 		" Info ",

@@ -56,8 +56,8 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 		}
 
 		result.Values = map[string]any{
-			"Origin": rtn.String(),
-			"New":    intv.String(),
+			"Origin": rtn,
+			"New":    intv,
 		}
 	case "state":
 		if state := svr.instance.Load().GetLastState(); state != nil {
@@ -200,6 +200,12 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 			return nil
 		})
 
+		result.Values["Handlers"] = latency4go.ConvertSlice(
+			svr.handlers,
+			func(h Handler) string {
+				return h.Name()
+			},
+		)
 		result.Values["Interval"] = interval
 		result.Values["Plugins"] = plugins
 	default:
