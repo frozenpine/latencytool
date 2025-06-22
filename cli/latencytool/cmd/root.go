@@ -67,10 +67,14 @@ func consoleExecute(
 	wait := make(chan struct{})
 
 	client.MessageLoop(
-		"console loop", nil,
-		ctl.LogState,
+		"console loop",
+		nil, nil,
 		func(r *ctl.Result) error {
-			defer close(wait)
+			defer func() {
+				if r.CmdName == command {
+					close(wait)
+				}
+			}()
 
 			return ctl.LogResult(r)
 		},

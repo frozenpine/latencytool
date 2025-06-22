@@ -1,6 +1,7 @@
 package ctl
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"sync/atomic"
@@ -66,10 +67,6 @@ func (c *ctlBaseClient) MessageLoop(
 		}
 	}
 
-	if handleResult == nil {
-		handleResult = LogResult
-	}
-
 	go func() {
 		subId, notify := c.Subscribe(name, core.Quick)
 
@@ -118,12 +115,15 @@ func (c *ctlBaseClient) MessageLoop(
 					continue
 				}
 
-				if err := handleResult(result); err != nil {
-					slog.Error(
-						"handle result failed",
-						slog.Any("error", err),
-						slog.String("name", name),
-					)
+				// 第一笔默认发送 `state` 命令不会调
+				if handleResult != nil && msg.msgID > 1 {
+					if err := handleResult(result); err != nil {
+						slog.Error(
+							"handle result failed",
+							slog.Any("error", err),
+							slog.String("name", name),
+						)
+					}
 				}
 
 				switch result.CmdName {
@@ -142,6 +142,12 @@ func (c *ctlBaseClient) MessageLoop(
 
 					state = &rtn
 				default:
+					slog.Log(
+						context.Background(), slog.LevelDebug-1,
+						"command result notified",
+						slog.String("name", name),
+						slog.Any("result", result),
+					)
 					continue
 				}
 			case MsgBroadCast:
@@ -163,7 +169,8 @@ func (c *ctlBaseClient) MessageLoop(
 			}
 
 			if state != nil {
-				slog.Info(
+				slog.Log(
+					context.Background(), slog.LevelDebug-1,
 					"latency state notified",
 					slog.String("name", name),
 					slog.Time("timestamp", state.Timestamp),
