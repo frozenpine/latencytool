@@ -40,7 +40,7 @@ func (ipcHdl *CtlIpcHandler) Write(msg *Message) error {
 func (ipcHdl *CtlIpcHandler) Start() {
 	ipcHdl.baseStart()
 
-	ipcHdl.hdlConnections.Store("ipc client", ipcHdl)
+	ipcHdl.addConn("ipc client", ipcHdl)
 
 	go func() {
 		for ipcHdl.svrRunning.Load() {
@@ -97,7 +97,8 @@ func NewIpcCtlHandler(name string) (*CtlIpcHandler, error) {
 	hdl := CtlIpcHandler{
 		server: svr,
 	}
-	hdl.hdlName = fmt.Sprintf("ctl_ipc_%s", name)
+	hdl.hdlName = fmt.Sprint("ctl_ipc_", name)
+	hdl.connName = fmt.Sprint("ipc://", name)
 	hdl.svrRunning.Store(true)
 
 	return &hdl, nil

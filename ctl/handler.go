@@ -3,6 +3,7 @@ package ctl
 import (
 	"log/slog"
 	"sync"
+	"sync/atomic"
 
 	"github.com/frozenpine/msgqueue/channel"
 	"github.com/frozenpine/msgqueue/core"
@@ -14,6 +15,9 @@ type Handler interface {
 
 	Start()
 	Commands() <-chan *Message
+
+	ConnName() string
+	ConnCount() int
 }
 
 type messageWriter interface {
@@ -24,13 +28,45 @@ type ctlBaseHandler struct {
 	channel.MemoChannel[*Message]
 
 	hdlName         string
+	connName        string
 	hdlCommands     chan *Message
+	hdlConnCount    atomic.Int32
 	hdlConnections  sync.Map
 	hdlCommandCache sync.Map
 }
 
 func (hdl *ctlBaseHandler) Name() string {
 	return hdl.hdlName
+}
+
+func (hdl *ctlBaseHandler) ConnName() string {
+	return hdl.connName
+}
+
+func (hdl *ctlBaseHandler) addConn(name string, wr messageWriter) {
+	if _, exist := hdl.hdlConnections.LoadOrStore(name, wr); exist {
+		slog.Error(
+			"connection writer already exist",
+			slog.String("name", name),
+		)
+	} else {
+		hdl.hdlConnCount.Add(1)
+	}
+}
+
+func (hdl *ctlBaseHandler) delConn(name any) {
+	if _, exist := hdl.hdlConnections.LoadAndDelete(name); exist {
+		hdl.hdlConnCount.Add(-1)
+	} else {
+		slog.Error(
+			"connection writer not exist",
+			slog.Any("name", name),
+		)
+	}
+}
+
+func (hdl *ctlBaseHandler) ConnCount() int {
+	return int(hdl.hdlConnCount.Load())
 }
 
 func (hdl *ctlBaseHandler) baseStart() {
@@ -53,7 +89,8 @@ func (hdl *ctlBaseHandler) dispatchResults() {
 						"invalid connection writer",
 						slog.Any("identity", key),
 					)
-					hdl.hdlConnections.Delete(key)
+
+					hdl.delConn(key)
 				}
 
 				err := wr.Write(msg)

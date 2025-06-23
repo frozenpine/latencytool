@@ -37,7 +37,7 @@ func (wr *tcpMsgWriter) Write(msg *Message) error {
 	buff[copy(buff, data)] = '\n'
 
 	if _, err = wr.conn.Write(buff); err != nil {
-		wr.hdl.hdlConnections.Delete(wr.identity)
+		wr.hdl.delConn(wr.identity)
 		return err
 	}
 
@@ -66,10 +66,10 @@ func (tcpHdl *CtlTcpHandler) handleConn(conn net.Conn) {
 		mask:     mask,
 	}
 
-	tcpHdl.hdlConnections.Store(remoteIdt, wr)
+	tcpHdl.addConn(remoteIdt, wr)
 
 	defer func() {
-		tcpHdl.hdlConnections.Delete(remoteIdt)
+		tcpHdl.delConn(remoteIdt)
 
 		conn.Close()
 	}()
@@ -140,7 +140,8 @@ func NewCtlTcpHandler(conn string) (*CtlTcpHandler, error) {
 	hdl := CtlTcpHandler{
 		listen: listen,
 	}
-	hdl.hdlName = fmt.Sprintf("ctl_tcp_%s", conn)
+	hdl.hdlName = fmt.Sprint("ctl_tcp_", conn)
+	hdl.connName = fmt.Sprint("tcp://", conn)
 
 	return &hdl, nil
 }

@@ -191,7 +191,7 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 		result.Values[VKeyHandler] = latency4go.ConvertSlice(
 			svr.handlers,
 			func(h Handler) string {
-				return h.Name()
+				return h.ConnName()
 			},
 		)
 		result.Values[VKeyInterval] = interval

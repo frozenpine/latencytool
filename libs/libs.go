@@ -72,6 +72,39 @@ func (c *PluginContainer) MarshalJSON() ([]byte, error) {
 	})
 }
 
+func (c *PluginContainer) UnmarshalJSON(v []byte) error {
+	data := make(map[string]json.RawMessage)
+	if err := json.Unmarshal(v, &data); err != nil {
+		return err
+	}
+
+	if typeV, exist := data["PluginType"]; exist {
+		if err := json.Unmarshal(typeV, &c.pluginType); err != nil {
+			return err
+		}
+	} else {
+		return errors.New("no plugin type")
+	}
+
+	if nameV, exist := data["Name"]; exist {
+		if err := json.Unmarshal(nameV, &c.name); err != nil {
+			return err
+		}
+	} else {
+		return errors.New("no plugin name")
+	}
+
+	if libV, exist := data["LibDir"]; exist {
+		if err := json.Unmarshal(libV, &c.libDir); err != nil {
+			return err
+		}
+	} else {
+		return errors.New("no lib dir")
+	}
+
+	return nil
+}
+
 var (
 	registeredPlugins sync.Map
 )
