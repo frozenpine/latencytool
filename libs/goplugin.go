@@ -33,44 +33,49 @@ type GoPluginLib struct {
 	cancel  context.CancelFunc
 	cfgPath string
 
-	initFn   func(context.Context, string) error
-	reportFn func(...string) error
-	seatsFn  func() []Seat
-	joinFn   func() error
+	initFn     func(context.Context, string) error
+	reportFn   func(...string) error
+	seatsFn    func() []Seat
+	priorityFn func() [][]int
+	joinFn     func() error
 }
 
-func (lib *GoPluginLib) Init(ctx context.Context, cfgPath string) (err error) {
-	lib.initOnce.Do(func() {
+func (goLib *GoPluginLib) Init(ctx context.Context, cfgPath string) (err error) {
+	goLib.initOnce.Do(func() {
 		if ctx == nil {
 			ctx = context.Background()
 		}
 
-		lib.ctx, lib.cancel = context.WithCancel(ctx)
+		goLib.ctx, goLib.cancel = context.WithCancel(ctx)
 
-		if err = lib.initFn(lib.ctx, cfgPath); err != nil {
+		if err = goLib.initFn(goLib.ctx, cfgPath); err != nil {
 			return
 		}
 
-		lib.cfgPath = cfgPath
+		goLib.cfgPath = cfgPath
 	})
 
 	return
 }
 
-func (lib *GoPluginLib) ReportFronts(addrList ...string) error {
-	return lib.reportFn(addrList...)
+func (goLib *GoPluginLib) ReportFronts(addrList ...string) error {
+	return goLib.reportFn(addrList...)
 }
 
-func (lib *GoPluginLib) Seats() []Seat {
-	return lib.seatsFn()
+func (goLib *GoPluginLib) Seats() []Seat {
+	return goLib.seatsFn()
 }
 
-func (lib *GoPluginLib) Stop() {
-	lib.cancel()
+func (goLib *GoPluginLib) Priority() [][]int {
+	return goLib.priorityFn()
 }
 
-func (lib *GoPluginLib) Join() error {
-	return lib.joinFn()
+func (goLib *GoPluginLib) Stop() {
+	goLib.cancel()
+}
+
+func (goLib *GoPluginLib) Join() error {
+	return goLib.joinFn()
 }
 
 func NewGoPlugin(dirName, libName string) (container *PluginContainer, err error) {
@@ -152,6 +157,30 @@ func NewGoPlugin(dirName, libName string) (container *PluginContainer, err error
 			return
 		} else {
 			lib.joinFn = joinFn
+		}
+
+		if seat, failed := lib.plugin.Lookup(SEATS_FUNC_NAME); failed != nil {
+			err = errors.Join(errLibFuncNotFound, failed)
+			return
+		} else if seatFn, ok := seat.(func() []Seat); !ok {
+			err = fmt.Errorf(
+				"%w: %s not found", errLibFuncNotFound, SEATS_FUNC_NAME,
+			)
+			return
+		} else {
+			lib.seatsFn = seatFn
+		}
+
+		if pri, failed := lib.plugin.Lookup(PRIORITY_FUNC_NAME); failed != nil {
+			err = errors.Join(errLibFuncNotFound, failed)
+			return
+		} else if priFn, ok := pri.(func() [][]int); !ok {
+			err = fmt.Errorf(
+				"%w: %s not found", errLibFuncNotFound, SEATS_FUNC_NAME,
+			)
+			return
+		} else {
+			lib.priorityFn = priFn
 		}
 
 		runtime.SetFinalizer(lib, func(plugin *GoPluginLib) {

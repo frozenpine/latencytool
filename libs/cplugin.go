@@ -27,6 +27,7 @@ typedef struct _level {
 typedef int (*initialize)(char*);
 typedef int (*report_fronts)(char**, int);
 typedef int (*seats)(seat_t**);
+typedef int (*priority)(level_t**);
 typedef int (*destory)();
 typedef int (*join)();
 
@@ -35,6 +36,7 @@ int help_report_fronts(report_fronts fn, char** ptr, int len) { return fn(ptr, l
 int help_destory(destory fn) { return fn(); }
 int help_join(join fn) { return fn(); }
 int help_seats(seats fn, seat_t** ptr) { return fn(ptr); }
+int help_priority(priority fn, level_t** ptr) { return fn(ptr); }
 */
 import "C"
 
@@ -64,37 +66,38 @@ type CPluginLib struct {
 	cancel  context.CancelFunc
 	cfgPath string
 
-	initFn    C.initialize
-	reportFn  C.report_fronts
-	seatsFn   C.seats
-	destoryFn C.destory
-	joinFn    C.join
+	initFn     C.initialize
+	reportFn   C.report_fronts
+	seatsFn    C.seats
+	priorityFn C.priority
+	destoryFn  C.destory
+	joinFn     C.join
 }
 
-func (clib *CPluginLib) Init(ctx context.Context, cfgPath string) (err error) {
-	clib.initOnce.Do(func() {
+func (cLib *CPluginLib) Init(ctx context.Context, cfgPath string) (err error) {
+	cLib.initOnce.Do(func() {
 		if ctx == nil {
 			ctx = context.Background()
 		}
 
-		clib.ctx, clib.cancel = context.WithCancel(ctx)
+		cLib.ctx, cLib.cancel = context.WithCancel(ctx)
 
 		cfg_path := C.CString(cfgPath)
 		defer C.free(unsafe.Pointer(cfg_path))
 
-		if rtn := C.help_init(clib.initFn, cfg_path); rtn != 0 {
+		if rtn := C.help_init(cLib.initFn, cfg_path); rtn != 0 {
 			err = ErrInitFailed
 			return
 		}
 
-		clib.cfgPath = cfgPath
+		cLib.cfgPath = cfgPath
 	})
 
 	return
 }
 
-func (clib *CPluginLib) Stop() {
-	if rtn := C.help_destory(clib.destoryFn); rtn != 0 {
+func (cLib *CPluginLib) Stop() {
+	if rtn := C.help_destory(cLib.destoryFn); rtn != 0 {
 		slog.Error(
 			"call module destory failed",
 			slog.Int("rtn", int(rtn)),
@@ -102,14 +105,14 @@ func (clib *CPluginLib) Stop() {
 	}
 }
 
-func (clib *CPluginLib) Join() error {
-	if rtn := C.help_join(clib.joinFn); rtn != 0 {
+func (cLib *CPluginLib) Join() error {
+	if rtn := C.help_join(cLib.joinFn); rtn != 0 {
 		return ErrJoinFailed
 	}
 	return nil
 }
 
-func (clib *CPluginLib) ReportFronts(addrList ...string) error {
+func (cLib *CPluginLib) ReportFronts(addrList ...string) error {
 	arr := make([]*C.char, 0, len(addrList))
 
 	for _, addr := range addrList {
@@ -123,7 +126,7 @@ func (clib *CPluginLib) ReportFronts(addrList ...string) error {
 	}()
 
 	if rtn := C.help_report_fronts(
-		clib.reportFn, &arr[0], C.int(len(addrList)),
+		cLib.reportFn, &arr[0], C.int(len(addrList)),
 	); rtn != 0 {
 		return ErrReportFailed
 	}
@@ -131,11 +134,11 @@ func (clib *CPluginLib) ReportFronts(addrList ...string) error {
 	return nil
 }
 
-func (clib *CPluginLib) Seats() []Seat {
+func (cLib *CPluginLib) Seats() []Seat {
 	buff := make([]*C.seat_t, 15)
 
 	count := C.help_seats(
-		clib.seatsFn, &buff[0],
+		cLib.seatsFn, &buff[0],
 	)
 
 	return latency4go.ConvertSlice(
@@ -148,6 +151,10 @@ func (clib *CPluginLib) Seats() []Seat {
 			}
 		},
 	)
+}
+
+func (cLib *CPluginLib) Priority() [][]int {
+	return nil
 }
 
 func NewCPlugin(
@@ -240,6 +247,17 @@ func NewCPlugin(
 			return
 		} else {
 			lib.seatsFn = (C.seats)(seat)
+		}
+
+		if pri := C.dlsym(lib.plugin, C.PRIORITY_FUNC_NAME); pri == nil {
+			msg := C.dlerror()
+
+			err = fmt.Errorf(
+				"%w: %s", errLibFuncNotFound, C.GoString(msg),
+			)
+			return
+		} else {
+			lib.priorityFn = (C.priority)(pri)
 		}
 
 		if destory := C.dlsym(lib.plugin, C.DESTORY_FUNC_NAME); destory == nil {

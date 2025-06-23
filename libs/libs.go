@@ -37,6 +37,7 @@ type Plugin interface {
 	Join() error
 	ReportFronts(...string) error
 	Seats() []Seat
+	Priority() [][]int
 }
 
 type PluginContainer struct {
