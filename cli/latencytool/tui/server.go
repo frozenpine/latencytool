@@ -71,8 +71,6 @@ func init() {
 		true,
 	).SetRegions(
 		true,
-	).SetTextAlign(
-		tview.AlignCenter,
 	).SetTitle(
 		" Query Interval ",
 	).SetTitleAlign(

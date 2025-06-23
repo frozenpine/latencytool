@@ -48,7 +48,7 @@ func handleState(state *latency4go.State) error {
 func handleResultInfo(r *ctl.Result) error {
 	stateV, ok := r.Values[ctl.VKeyState].(json.RawMessage)
 	if !ok {
-		slog.Error("no state in info result")
+		slog.Warn("no state in info result")
 	} else {
 		var state latency4go.State
 		if err := json.Unmarshal(stateV, &state); err != nil {
@@ -60,7 +60,7 @@ func handleResultInfo(r *ctl.Result) error {
 
 	interV, ok := r.Values[ctl.VKeyInterval].(json.RawMessage)
 	if !ok {
-		slog.Error("no interval in info result")
+		slog.Warn("no interval in info result")
 	} else {
 		var interval time.Duration
 		if err := json.Unmarshal(interV, &interval); err != nil {
@@ -72,7 +72,7 @@ func handleResultInfo(r *ctl.Result) error {
 
 	hdlV, ok := r.Values[ctl.VKeyHandler].(json.RawMessage)
 	if !ok {
-		slog.Error("no handlers in info result")
+		slog.Warn("no handlers in info result")
 	} else {
 		var handlers = []string{}
 		if err := json.Unmarshal(hdlV, &handlers); err != nil {
@@ -90,7 +90,7 @@ func handleResultPeriod(r *ctl.Result) error {
 
 	newV, ok := r.Values[ctl.VKeyInterval].(json.RawMessage)
 	if !ok {
-		slog.Error("no interval in period result")
+		slog.Warn("no interval in period result")
 	} else {
 		var interv time.Duration
 		if err := json.Unmarshal(newV, &interv); err != nil {
@@ -108,7 +108,7 @@ func handleResultConfig(r *ctl.Result) error {
 
 	cfgV, ok := r.Values[ctl.VKeyConfig].(json.RawMessage)
 	if !ok {
-		slog.Error("no config in result")
+		slog.Warn("no config in result")
 	} else if state := lastState.Load(); state != nil {
 		if err := json.Unmarshal(cfgV, &state.Config); err != nil {
 			return err
