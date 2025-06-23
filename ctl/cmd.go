@@ -55,14 +55,14 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 			)
 		}
 
-		result.Values = map[string]any{
-			"Origin": rtn,
-			"New":    intv,
+		result.Values = values{
+			VKeyIntervalOrigin: rtn,
+			VKeyInterval:       intv,
 		}
 	case "state":
 		if state := svr.instance.Load().GetLastState(); state != nil {
-			result.Values = map[string]any{
-				"State": state,
+			result.Values = values{
+				VKeyState: state,
 			}
 		} else {
 			result.Rtn = 1
@@ -78,8 +78,8 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 		}
 
 		cfg := svr.instance.Load().GetConfig()
-		result.Values = map[string]any{
-			"Config": cfg,
+		result.Values = values{
+			VKeyConfig: cfg,
 		}
 	case "query":
 		state, err := svr.instance.Load().QueryLatency(cmd.KwArgs)
@@ -92,8 +92,8 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 			break
 		}
 
-		result.Values = map[string]any{
-			"State": state,
+		result.Values = values{
+			VKeyState: state,
 		}
 	case "plugin":
 		name, exist := cmd.KwArgs["plugin"]
@@ -183,8 +183,8 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 		}
 	case "info":
 		if state := svr.instance.Load().GetLastState(); state != nil {
-			result.Values = map[string]any{
-				"State": state,
+			result.Values = values{
+				VKeyState: state,
 			}
 		} else {
 			result.Rtn = 1
@@ -200,14 +200,14 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 			return nil
 		})
 
-		result.Values["Handlers"] = latency4go.ConvertSlice(
+		result.Values[VKeyHandler] = latency4go.ConvertSlice(
 			svr.handlers,
 			func(h Handler) string {
 				return h.Name()
 			},
 		)
-		result.Values["Interval"] = interval
-		result.Values["Plugins"] = plugins
+		result.Values[VKeyInterval] = interval
+		result.Values[VKeyPlugin] = plugins
 	default:
 		result.Rtn = 1
 		result.Message = "unsupported command"

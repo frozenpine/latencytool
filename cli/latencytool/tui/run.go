@@ -46,7 +46,7 @@ func handleState(state *latency4go.State) error {
 }
 
 func handleResultInfo(r *ctl.Result) error {
-	stateV, ok := r.Values["State"].(json.RawMessage)
+	stateV, ok := r.Values[ctl.VKeyState].(json.RawMessage)
 	if !ok {
 		slog.Error("no state in info result")
 	} else {
@@ -58,7 +58,7 @@ func handleResultInfo(r *ctl.Result) error {
 		}
 	}
 
-	interV, ok := r.Values["Interval"].(json.RawMessage)
+	interV, ok := r.Values[ctl.VKeyInterval].(json.RawMessage)
 	if !ok {
 		slog.Error("no interval in info result")
 	} else {
@@ -70,7 +70,7 @@ func handleResultInfo(r *ctl.Result) error {
 		SetInterval(interval)
 	}
 
-	hdlV, ok := r.Values["Handlers"].(json.RawMessage)
+	hdlV, ok := r.Values[ctl.VKeyHandler].(json.RawMessage)
 	if !ok {
 		slog.Error("no handlers in info result")
 	} else {
@@ -88,9 +88,9 @@ func handleResultInfo(r *ctl.Result) error {
 func handleResultPeriod(r *ctl.Result) error {
 	ctl.LogResult(r)
 
-	newV, ok := r.Values["New"].(json.RawMessage)
+	newV, ok := r.Values[ctl.VKeyInterval].(json.RawMessage)
 	if !ok {
-		slog.Error("no new interval in period result")
+		slog.Error("no interval in period result")
 	} else {
 		var interv time.Duration
 		if err := json.Unmarshal(newV, &interv); err != nil {
@@ -123,12 +123,6 @@ func StartTui(
 		case tcell.KeyCtrlC:
 			commandView.SetText("")
 			return nil
-			// case tcell.KeyTab:
-			// 	if commandView.HasFocus() {
-			// 		app.SetFocus(infoNodes)
-			// 	} else {
-			// 		app.SetFocus(commandView)
-			// 	}
 		}
 		return event
 	})

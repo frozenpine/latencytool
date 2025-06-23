@@ -8,39 +8,52 @@ import (
 	"github.com/frozenpine/latency4go"
 )
 
+type resultValueKey string
+
+const (
+	VKeyInterval       resultValueKey = "Interval"
+	VKeyIntervalOrigin resultValueKey = "Origin"
+	VKeyState          resultValueKey = "State"
+	VKeyConfig         resultValueKey = "Config"
+	VKeyPlugin         resultValueKey = "Plugins"
+	VKeyHandler        resultValueKey = "Handlers"
+)
+
+type values map[resultValueKey]any
+
 type Result struct {
 	Rtn     int
 	Message string
 	CmdName string
-	Values  map[string]any
+	Values  values
 }
 
 func (r *Result) UnmarshalJSON(v []byte) error {
-	data := make(map[string]json.RawMessage)
+	results := make(map[resultValueKey]json.RawMessage)
 
-	if err := json.Unmarshal(v, &data); err != nil {
+	if err := json.Unmarshal(v, &results); err != nil {
 		return err
 	}
 
-	if err := json.Unmarshal(data["Rtn"], &r.Rtn); err != nil {
+	if err := json.Unmarshal(results["Rtn"], &r.Rtn); err != nil {
 		return err
 	}
 
-	if err := json.Unmarshal(data["Message"], &r.Message); err != nil {
+	if err := json.Unmarshal(results["Message"], &r.Message); err != nil {
 		return err
 	}
 
-	if err := json.Unmarshal(data["CmdName"], &r.CmdName); err != nil {
+	if err := json.Unmarshal(results["CmdName"], &r.CmdName); err != nil {
 		return err
 	}
 
-	values := make(map[string]json.RawMessage)
-	r.Values = make(map[string]any)
-	if err := json.Unmarshal(data["Values"], &values); err != nil {
+	data := make(map[resultValueKey]json.RawMessage)
+	r.Values = values{}
+	if err := json.Unmarshal(results["Values"], &data); err != nil {
 		return nil
 	}
 
-	for k, v := range values {
+	for k, v := range data {
 		r.Values[k] = v
 	}
 
@@ -48,8 +61,8 @@ func (r *Result) UnmarshalJSON(v []byte) error {
 }
 
 var LogResult = func(result *Result) error {
-	values := map[string]any{}
-	keys := make([]string, 0, len(result.Values))
+	values := values{}
+	keys := make([]resultValueKey, 0, len(result.Values))
 
 	for k, v := range result.Values {
 		var value any
@@ -60,7 +73,7 @@ var LogResult = func(result *Result) error {
 			slog.Error(
 				"unmarshal result values failed",
 				slog.Any("error", err),
-				slog.String("key", k),
+				slog.String("key", string(k)),
 			)
 		} else {
 			values[k] = value
@@ -75,8 +88,8 @@ var LogResult = func(result *Result) error {
 			slog.String("cmd", result.CmdName),
 			slog.String("cmd_msg", result.Message),
 		},
-		latency4go.ConvertSlice(keys, func(k string) any {
-			return slog.Any(k, values[k])
+		latency4go.ConvertSlice(keys, func(k resultValueKey) any {
+			return slog.Any(string(k), values[k])
 		})...,
 	)
 
