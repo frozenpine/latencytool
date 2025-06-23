@@ -22,6 +22,7 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 
 	result := Result{
 		CmdName: cmd.Name,
+		Values:  make(values),
 	}
 
 	switch cmd.Name {
@@ -55,15 +56,11 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 			)
 		}
 
-		result.Values = values{
-			VKeyIntervalOrigin: rtn,
-			VKeyInterval:       intv,
-		}
+		result.Values[VKeyIntervalOrigin] = rtn
+		result.Values[VKeyInterval] = intv
 	case "state":
 		if state := svr.instance.Load().GetLastState(); state != nil {
-			result.Values = values{
-				VKeyState: state,
-			}
+			result.Values[VKeyState] = state
 		} else {
 			result.Rtn = 1
 			result.Message = "get last state failed"
@@ -78,9 +75,7 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 		}
 
 		cfg := svr.instance.Load().GetConfig()
-		result.Values = values{
-			VKeyConfig: cfg,
-		}
+		result.Values[VKeyConfig] = cfg
 	case "query":
 		state, err := svr.instance.Load().QueryLatency(cmd.KwArgs)
 		if err != nil {
@@ -92,9 +87,7 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 			break
 		}
 
-		result.Values = values{
-			VKeyState: state,
-		}
+		result.Values[VKeyState] = state
 	case "plugin":
 		name, exist := cmd.KwArgs["plugin"]
 		if !exist {
@@ -183,12 +176,7 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 		}
 	case "info":
 		if state := svr.instance.Load().GetLastState(); state != nil {
-			result.Values = values{
-				VKeyState: state,
-			}
-		} else {
-			result.Rtn = 1
-			result.Message = "get last state failed"
+			result.Values[VKeyState] = state
 		}
 
 		interval := svr.instance.Load().GetInterval()

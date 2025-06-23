@@ -137,17 +137,20 @@ func (c *ctlBaseClient) MessageLoop(
 				case "state":
 					var rtn latency4go.State
 
-					if err := json.Unmarshal(
-						result.Values["State"].(json.RawMessage), &rtn,
-					); err != nil {
-						slog.Error(
-							"unmarshal state failed",
-							slog.Any("error", err),
-						)
-						continue
-					}
+					stateV, ok := result.Values["State"].(json.RawMessage)
+					if !ok {
+						slog.Error("no state in result values")
+					} else {
+						if err := json.Unmarshal(stateV, &rtn); err != nil {
+							slog.Error(
+								"unmarshal state failed",
+								slog.Any("error", err),
+							)
+							continue
+						}
 
-					state = &rtn
+						state = &rtn
+					}
 				default:
 					slog.Log(
 						context.Background(), slog.LevelDebug-1,

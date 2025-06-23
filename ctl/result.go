@@ -47,14 +47,16 @@ func (r *Result) UnmarshalJSON(v []byte) error {
 		return err
 	}
 
-	data := make(map[resultValueKey]json.RawMessage)
-	r.Values = values{}
-	if err := json.Unmarshal(results["Values"], &data); err != nil {
-		return nil
-	}
+	if len(results["Values"]) > 0 {
+		data := make(map[resultValueKey]json.RawMessage)
+		r.Values = values{}
+		if err := json.Unmarshal(results["Values"], &data); err != nil {
+			return nil
+		}
 
-	for k, v := range data {
-		r.Values[k] = v
+		for k, v := range data {
+			r.Values[k] = v
+		}
 	}
 
 	return nil

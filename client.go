@@ -277,8 +277,15 @@ func (c *LatencyClient) queryLatency(cfg *QueryConfig) ([]*ExFrontLatency, error
 }
 
 func (c *LatencyClient) GetLastState() *State {
-	report := *c.lastReport.Load()
-	return NewState(report.Timestamp, c.cfg.Load(), report.Latency)
+	if last := c.lastReport.Load(); last != nil {
+		return NewState(
+			last.Timestamp,
+			c.cfg.Load().Clone(),
+			last.Latency,
+		)
+	}
+
+	return nil
 }
 
 func (c *LatencyClient) sinkLatency(ts time.Time, latency []*ExFrontLatency) error {

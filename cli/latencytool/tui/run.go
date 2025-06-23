@@ -103,6 +103,23 @@ func handleResultPeriod(r *ctl.Result) error {
 	return nil
 }
 
+func handleResultConfig(r *ctl.Result) error {
+	ctl.LogResult(r)
+
+	cfgV, ok := r.Values[ctl.VKeyConfig].(json.RawMessage)
+	if !ok {
+		slog.Error("no config in result")
+	} else if state := lastState.Load(); state != nil {
+		if err := json.Unmarshal(cfgV, &state.Config); err != nil {
+			return err
+		}
+
+		SetConfig()
+	}
+
+	return nil
+}
+
 func StartTui(
 	ctx context.Context, client ctl.CtlClient,
 	flags *pflag.FlagSet, cancel func(),
@@ -147,6 +164,8 @@ func StartTui(
 				return handleResultInfo(r)
 			case "period":
 				return handleResultPeriod(r)
+			case "config":
+				return handleResultConfig(r)
 			}
 
 			return ctl.LogResult(r)

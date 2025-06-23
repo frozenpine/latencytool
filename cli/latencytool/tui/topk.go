@@ -53,7 +53,6 @@ func SetTopK() {
 		}
 
 		client.app.Lock()
-		defer client.app.Unlock()
 
 		topN.Clear()
 
@@ -82,6 +81,9 @@ func SetTopK() {
 			state.Timestamp.Local().Format("2006-01-02 15:04:05"),
 		))
 		topTs.Highlight("1")
+		client.app.Unlock()
+
+		client.app.Draw()
 	}
 }
 

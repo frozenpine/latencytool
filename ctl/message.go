@@ -26,6 +26,10 @@ var (
 )
 
 func getData[T Command | Result | latency4go.State](data []byte) (*T, error) {
+	if len(data) <= 0 {
+		return nil, nil
+	}
+
 	var v T
 
 	if err := json.Unmarshal(data, &v); err != nil {

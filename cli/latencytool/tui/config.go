@@ -32,6 +32,8 @@ func SetConfig() {
 			return
 		}
 
+		client.app.Lock()
+
 		configView.Clear()
 
 		configView.AddItem(
@@ -47,5 +49,9 @@ func SetConfig() {
 		).AddItem(
 			"Users", state.Config.Users.String(), '*', nil,
 		)
+
+		client.app.Unlock()
+
+		client.app.Draw()
 	}
 }
