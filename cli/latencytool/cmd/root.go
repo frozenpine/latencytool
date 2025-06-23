@@ -185,8 +185,12 @@ and report to trading systems`,
 				client, err = ctl.NewCtlTcpClient(
 					strings.TrimPrefix(clientConn, "tcp://"),
 				)
+			case strings.HasPrefix(clientConn, "ssh+tcp://"):
+				client, err = ctl.NewCtlSshTcpClient(
+					strings.TrimPrefix(clientConn, "ssh+tcp://"),
+				)
 			default:
-				client, err = ctl.NewCtlIpcClient(clientConn)
+				err = errors.New("unknown client conn")
 			}
 
 			if err != nil {

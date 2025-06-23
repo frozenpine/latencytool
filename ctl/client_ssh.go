@@ -1,22 +1,22 @@
 package ctl
 
 import (
-	"fmt"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 )
 
 type CtlSshTcpClient struct {
 	*CtlTcpClient
-
-	sshHost   string
-	sshCfg    ssh.ClientConfig
-	sshClient *ssh.Client
-	lsnr      net.Listener
 }
 
 func forward(
@@ -69,20 +69,88 @@ func forward(
 	wg.Wait()
 }
 
-func NewCtlSshTcpClient(conn string) (*CtlSshTcpClient, error) {
-	var (
-		sshHost string
-		sshCfg  ssh.ClientConfig
-
-		remoteConn string
+var (
+	sshConnPattern = regexp.MustCompile(
+		`(?P<user>[^:]+):(?P<pass>[^@]*)@(?P<ssh>[^?]+)\?(?P<conn>.+)`,
 	)
 
-	sshClient, err := ssh.Dial("tcp", sshHost, &sshCfg)
+	userIdx = sshConnPattern.SubexpIndex("user")
+	passIdx = sshConnPattern.SubexpIndex("pass")
+	sshIdx  = sshConnPattern.SubexpIndex("ssh")
+	connIdx = sshConnPattern.SubexpIndex("conn")
+)
+
+func NewCtlSshTcpClient(conn string) (*CtlSshTcpClient, error) {
+	match := sshConnPattern.FindStringSubmatch(conn)
+
+	if len(match) < 1 {
+		return nil, errors.New("invalid ssh forward conn")
+	}
+
+	var (
+		sshHost = match[sshIdx]
+		sshUser = match[userIdx]
+		sshPass = match[passIdx]
+		sshAuth []ssh.AuthMethod
+	)
+
+	if !strings.Contains(sshHost, ":") {
+		sshHost = sshHost + ":22"
+	}
+
+	if sshPass != "" && !strings.HasPrefix(sshPass, "key=") {
+		slog.Info(
+			"connect ssh with user/pass",
+			slog.String("user", sshUser),
+			slog.String("pass", strings.Map(func(r rune) rune {
+				return '*'
+			}, sshPass)),
+		)
+
+		sshAuth = append(sshAuth, ssh.Password(sshPass))
+	} else {
+		var keyFile string
+
+		if sshPass == "" {
+			userHome, err := os.UserHomeDir()
+			if err != nil {
+				return nil, err
+			}
+			keyFile = filepath.Join(userHome, ".ssh", "id_rsa")
+		} else {
+			keyFile = strings.TrimPrefix(match[passIdx], "key=")
+		}
+
+		slog.Info(
+			"connect ssh with user/key",
+			slog.String("user", sshUser),
+			slog.String("key", keyFile),
+		)
+
+		key, err := os.ReadFile(keyFile)
+		if err != nil {
+			return nil, err
+		}
+
+		sign, err := ssh.ParsePrivateKey(key)
+		if err != nil {
+			return nil, err
+		}
+
+		sshAuth = append(sshAuth, ssh.PublicKeys(sign))
+	}
+
+	sshClient, err := ssh.Dial("tcp", sshHost, &ssh.ClientConfig{
+		User:            sshUser,
+		Auth:            sshAuth,
+		Timeout:         time.Second * 15,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	pipe, err := sshClient.Dial("tcp", remoteConn)
+	pipe, err := sshClient.Dial("tcp", match[connIdx])
 	if err != nil {
 		return nil, err
 	}
@@ -98,15 +166,13 @@ func NewCtlSshTcpClient(conn string) (*CtlSshTcpClient, error) {
 	} else {
 		slog.Info(
 			"open local listenner for forwarding",
-			slog.Any("lsnr", addr),
+			slog.Any("lsnr", lsnr.Addr()),
 		)
 	}
 
 	go forward(sshClient, lsnr, pipe)
 
-	inner, err := NewCtlTcpClient(fmt.Sprintf(
-		"tcp://%s:%d", addr.IP.String(), addr.Port,
-	))
+	inner, err := NewCtlTcpClient(lsnr.Addr().String())
 	if err != nil {
 		lsnr.Close()
 		return nil, err
@@ -114,10 +180,6 @@ func NewCtlSshTcpClient(conn string) (*CtlSshTcpClient, error) {
 
 	client := CtlSshTcpClient{
 		CtlTcpClient: inner,
-		sshHost:      sshHost,
-		sshCfg:       sshCfg,
-		sshClient:    sshClient,
-		lsnr:         lsnr,
 	}
 
 	return &client, nil
