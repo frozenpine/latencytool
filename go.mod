@@ -12,8 +12,8 @@ require (
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6
 	github.com/valyala/bytebufferpool v1.0.0
-	gitlab.devops.rdrk.com.cn/quant/rem4go v0.0.0-20250612024936-8707660650a5
-	gitlab.devops.rdrk.com.cn/quant/yd4go v0.0.0-20250612024858-18b1ed61721b
+	gitlab.devops.rdrk.com.cn/quant/rem4go v0.0.0-20250623093351-e43335351091
+	gitlab.devops.rdrk.com.cn/quant/yd4go v0.0.0-20250623102327-2bf506a91dab
 	golang.org/x/crypto v0.39.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
@@ -39,6 +39,6 @@ require (
 	golang.org/x/tools v0.33.0 // indirect
 )
 
-replace gitlab.devops.rdrk.com.cn/quant/yd4go v0.0.0-20250612024858-18b1ed61721b => github.com/frozenpine/yd4go v0.0.0-20250612024858-18b1ed61721b
+replace gitlab.devops.rdrk.com.cn/quant/yd4go v0.0.0-20250623102327-2bf506a91dab => github.com/frozenpine/yd4go v0.0.0-20250623102327-2bf506a91dab
 
-replace gitlab.devops.rdrk.com.cn/quant/rem4go v0.0.0-20250612024936-8707660650a5 => github.com/frozenpine/rem4go v0.0.0-20250612024936-8707660650a5
+replace gitlab.devops.rdrk.com.cn/quant/rem4go v0.0.0-20250623093351-e43335351091 => github.com/frozenpine/rem4go v0.0.0-20250623093351-e43335351091

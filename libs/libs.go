@@ -26,11 +26,17 @@ var (
 	errInvalidRegLib    = errors.New("invalid registered lib")
 )
 
+type Seat struct {
+	Idx  int
+	Addr string
+}
+
 type Plugin interface {
 	Init(context.Context, string) error
 	Stop()
 	Join() error
 	ReportFronts(...string) error
+	Seats() []Seat
 }
 
 type PluginContainer struct {

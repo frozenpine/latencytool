@@ -9,11 +9,24 @@ package libs
 
 const char* INIT_FUNC_NAME = "initialize";
 const char* REPORT_FUNC_NAME = "report_fronts";
+const char* SEATS_FUNC_NAME = "seats";
+const char* PRIORITY_FUNC_NAME = "priority";
 const char* DESTORY_FUNC_NAME = "destory";
 const char* JOIN_FUNC_NAME = "join";
 
+typedef struct _seat {
+	int idx;
+	char* addr;
+} seat_t;
+
+typedef struct _level {
+	int* levels;
+	int len;
+} level_t;
+
 typedef int (*initialize)(char*);
 typedef int (*report_fronts)(char**, int);
+typedef int (*seats)(seat_t**);
 typedef int (*destory)();
 typedef int (*join)();
 
@@ -21,6 +34,7 @@ int help_init(initialize fn, char* cfg_path) { return fn(cfg_path); }
 int help_report_fronts(report_fronts fn, char** ptr, int len) { return fn(ptr, len); }
 int help_destory(destory fn) { return fn(); }
 int help_join(join fn) { return fn(); }
+int help_seats(seats fn, seat_t** ptr) { return fn(ptr); }
 */
 import "C"
 
@@ -34,6 +48,8 @@ import (
 	"runtime"
 	"sync"
 	"unsafe"
+
+	"github.com/frozenpine/latency4go"
 )
 
 type CPluginLib struct {
@@ -50,6 +66,7 @@ type CPluginLib struct {
 
 	initFn    C.initialize
 	reportFn  C.report_fronts
+	seatsFn   C.seats
 	destoryFn C.destory
 	joinFn    C.join
 }
@@ -112,6 +129,25 @@ func (clib *CPluginLib) ReportFronts(addrList ...string) error {
 	}
 
 	return nil
+}
+
+func (clib *CPluginLib) Seats() []Seat {
+	buff := make([]*C.seat_t, 15)
+
+	count := C.help_seats(
+		clib.seatsFn, &buff[0],
+	)
+
+	return latency4go.ConvertSlice(
+		buff[:int(count)], func(v *C.seat_t) Seat {
+			addr := C.GoString(v.addr)
+			C.free(unsafe.Pointer(v.addr))
+			return Seat{
+				Idx:  int(v.idx),
+				Addr: addr,
+			}
+		},
+	)
 }
 
 func NewCPlugin(
@@ -193,6 +229,17 @@ func NewCPlugin(
 			return
 		} else {
 			lib.reportFn = (C.report_fronts)(report)
+		}
+
+		if seat := C.dlsym(lib.plugin, C.SEATS_FUNC_NAME); seat == nil {
+			msg := C.dlerror()
+
+			err = fmt.Errorf(
+				"%w: %s", errLibFuncNotFound, C.GoString(msg),
+			)
+			return
+		} else {
+			lib.seatsFn = (C.seats)(seat)
 		}
 
 		if destory := C.dlsym(lib.plugin, C.DESTORY_FUNC_NAME); destory == nil {

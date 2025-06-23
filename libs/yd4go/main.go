@@ -12,6 +12,7 @@ import (
 	"sync"
 	"unsafe"
 
+	"github.com/frozenpine/latency4go"
 	"github.com/frozenpine/latency4go/libs"
 	"gitlab.devops.rdrk.com.cn/quant/yd4go"
 )
@@ -124,4 +125,79 @@ func join() C.int {
 	Join()
 
 	return 0
+}
+
+func Seats() []libs.Seat {
+	seats := api.Seats()
+
+	return latency4go.ConvertSlice(
+		seats, func(v struct {
+			Idx  int
+			Addr string
+		}) libs.Seat {
+			return libs.Seat{
+				Idx:  v.Idx,
+				Addr: v.Addr,
+			}
+		},
+	)
+}
+
+//export seats
+func seats(buff unsafe.Pointer) C.int {
+	seats := Seats()
+
+	buffSlice := *(*[]*struct {
+		idx  C.int
+		addr *C.char
+	})(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(buff),
+		Len:  len(seats),
+		Cap:  len(seats),
+	}))
+
+	for idx, s := range seats {
+		buffSlice[idx].idx = C.int(s.Idx)
+		buffSlice[idx].addr = C.CString(s.Addr)
+	}
+
+	return C.int(len(seats))
+}
+
+func Priority() [][]int {
+	prio := api.Priority()
+
+	result := [][]int{}
+
+	for _, v := range prio {
+		result = append(result, v)
+	}
+
+	return result
+}
+
+//export priority
+func priority(buff unsafe.Pointer) C.int {
+	prio := Priority()
+
+	buffSlice := *(*[]struct {
+		levels *C.int
+		len    C.int
+	})(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(buff),
+		Len:  len(prio),
+		Cap:  len(prio),
+	}))
+
+	for idx, lvl := range prio {
+		buffSlice[idx] = struct {
+			levels *C.int
+			len    C.int
+		}{
+			levels: (*C.int)(unsafe.Pointer(&lvl[0])),
+			len:    C.int(len(lvl)),
+		}
+	}
+
+	return C.int(len(prio))
 }

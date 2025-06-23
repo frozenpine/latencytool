@@ -14,9 +14,11 @@ import (
 )
 
 const (
-	INIT_FUNC_NAME   = "CreateInstance"
-	REPORT_FUNC_NAME = "ReportFronts"
-	JOIN_FUNC_NAME   = "Join"
+	INIT_FUNC_NAME     = "CreateInstance"
+	REPORT_FUNC_NAME   = "ReportFronts"
+	SEATS_FUNC_NAME    = "Seats"
+	PRIORITY_FUNC_NAME = "Priority"
+	JOIN_FUNC_NAME     = "Join"
 )
 
 type GoPluginLib struct {
@@ -33,6 +35,7 @@ type GoPluginLib struct {
 
 	initFn   func(context.Context, string) error
 	reportFn func(...string) error
+	seatsFn  func() []Seat
 	joinFn   func() error
 }
 
@@ -56,6 +59,10 @@ func (lib *GoPluginLib) Init(ctx context.Context, cfgPath string) (err error) {
 
 func (lib *GoPluginLib) ReportFronts(addrList ...string) error {
 	return lib.reportFn(addrList...)
+}
+
+func (lib *GoPluginLib) Seats() []Seat {
+	return lib.seatsFn()
 }
 
 func (lib *GoPluginLib) Stop() {

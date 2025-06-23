@@ -10,9 +10,11 @@ import (
 	"log/slog"
 	"os"
 	"reflect"
+	"slices"
 	"sync"
 	"unsafe"
 
+	"github.com/frozenpine/latency4go"
 	"github.com/frozenpine/latency4go/libs"
 	"github.com/pelletier/go-toml/v2"
 	"gitlab.devops.rdrk.com.cn/quant/rem4go/emc"
@@ -127,6 +129,82 @@ func report_fronts(ptr **C.char, len C.int) C.int {
 	}
 
 	return 0
+}
+
+func Seats() []libs.Seat {
+	seats := api.Seats()
+
+	return latency4go.ConvertSlice(
+		seats, func(v emc.Seat) libs.Seat {
+			return libs.Seat{
+				Idx:  v.Index,
+				Addr: v.Address,
+			}
+		},
+	)
+}
+
+//export seats
+func seats(buff unsafe.Pointer) C.int {
+	seats := Seats()
+
+	buffSlice := *(*[]*struct {
+		idx  C.int
+		addr *C.char
+	})(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(buff),
+		Len:  len(seats),
+		Cap:  len(seats),
+	}))
+
+	for idx, s := range seats {
+		buffSlice[idx].idx = C.int(s.Idx)
+		buffSlice[idx].addr = C.CString(s.Addr)
+	}
+
+	return C.int(len(seats))
+}
+
+func Priority() [][]int {
+	prio := api.Priority()
+
+	results := [][]int{}
+
+	for _, p := range prio.Levels {
+		if p[0] == 0 {
+			break
+		}
+
+		results = append(results, p[0:slices.Index(p[:], 0)])
+	}
+
+	return results
+}
+
+//export priority
+func priority(buff unsafe.Pointer) C.int {
+	prio := Priority()
+
+	buffSlice := *(*[]struct {
+		levels *C.int
+		len    C.int
+	})(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(buff),
+		Len:  len(prio),
+		Cap:  len(prio),
+	}))
+
+	for idx, lvl := range prio {
+		buffSlice[idx] = struct {
+			levels *C.int
+			len    C.int
+		}{
+			levels: (*C.int)(unsafe.Pointer(&lvl[0])),
+			len:    C.int(len(lvl)),
+		}
+	}
+
+	return C.int(len(prio))
 }
 
 //export destory
