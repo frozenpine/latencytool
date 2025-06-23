@@ -1,6 +1,7 @@
 package ctl
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -12,12 +13,10 @@ import (
 type CtlSshTcpClient struct {
 	*CtlTcpClient
 
-	sshHost    string
-	sshCfg     ssh.ClientConfig
-	sshClient  *ssh.Client
-	remoteConn string
-	localConn  string
-	lsnr       net.Listener
+	sshHost   string
+	sshCfg    ssh.ClientConfig
+	sshClient *ssh.Client
+	lsnr      net.Listener
 }
 
 func forward(
@@ -37,7 +36,10 @@ func forward(
 
 		return
 	}
-	defer conn.Close()
+	defer func() {
+		conn.Close()
+		lsnr.Close()
+	}()
 
 	wg := sync.WaitGroup{}
 
@@ -73,7 +75,6 @@ func NewCtlSshTcpClient(conn string) (*CtlSshTcpClient, error) {
 		sshCfg  ssh.ClientConfig
 
 		remoteConn string
-		localConn  string
 	)
 
 	sshClient, err := ssh.Dial("tcp", sshHost, &sshCfg)
@@ -86,14 +87,26 @@ func NewCtlSshTcpClient(conn string) (*CtlSshTcpClient, error) {
 		return nil, err
 	}
 
-	lsnr, err := net.Listen("tcp", localConn)
+	addr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, err
 	}
 
+	lsnr, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		return nil, err
+	} else {
+		slog.Info(
+			"open local listenner for forwarding",
+			slog.Any("lsnr", addr),
+		)
+	}
+
 	go forward(sshClient, lsnr, pipe)
 
-	inner, err := NewCtlTcpClient(localConn)
+	inner, err := NewCtlTcpClient(fmt.Sprintf(
+		"tcp://%s:%d", addr.IP.String(), addr.Port,
+	))
 	if err != nil {
 		lsnr.Close()
 		return nil, err
@@ -104,8 +117,6 @@ func NewCtlSshTcpClient(conn string) (*CtlSshTcpClient, error) {
 		sshHost:      sshHost,
 		sshCfg:       sshCfg,
 		sshClient:    sshClient,
-		remoteConn:   remoteConn,
-		localConn:    localConn,
 		lsnr:         lsnr,
 	}
 
