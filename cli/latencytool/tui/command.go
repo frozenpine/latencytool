@@ -15,74 +15,82 @@ import (
 var (
 	commandView = tview.NewInputField()
 
-	commandHelp = `
-Available commands:
---------------- Remote Commands -------------------
- suspend: suspend latency tool running
-  resume: resume suspended latency tool
-  period: change latency tool query period
-   state: get latency tool last state
-  config: change latency tool query config
-   query: query latency result with onetime config
-  plugin: add latency reporter plugin
-unplugin: remove reporter plugin from latency tool
-    info: get latency tool info
------------------ Local Commands ------------------
-	help: print this help message
-	 top: change TopK view
-	exit: exit ctl client running
-
+	commandHelp = `════════════════════════════════════════════════════
+ Available commands:
+──────────────── Remote Commands ───────────────────
+  suspend: suspend latency tool running
+   resume: resume suspended latency tool
+   period: change latency tool query period
+    state: get latency tool last state
+   config: change latency tool query config
+    query: query latency result with onetime config
+   plugin: add latency reporter plugin
+ unplugin: remove reporter plugin from latency tool
+     info: get latency tool info
+──────────────── Local Commands ────────────────────
+     help: print this help message
+ 	  top: change TopK view
+ 	 exit: exit ctl client running
+════════════════════════════════════════════════════
 `
 
-	suspendDetail = `
-Commnad > suspend ↵
-
+	suspendDetail = `═══════════════════════════════════════════════════════════════════════════════
+ Commnad > suspend ↵
+═══════════════════════════════════════════════════════════════════════════════
 `
-	resumeDetail = `
-Commnad > resume ↵
-
+	resumeDetail = `═══════════════════════════════════════════════════════════════════════════════
+ Commnad > resume ↵
+═══════════════════════════════════════════════════════════════════════════════
 `
-	periodDetail = `
-Commnad > period --interval {duration} ↵
-
+	periodDetail = `═══════════════════════════════════════════════════════════════════════════════
+ Commnad > period --interval {duration} ↵
+═══════════════════════════════════════════════════════════════════════════════
 `
-	stateDetail = `
-Commnad > state ↵
-
+	stateDetail = `═══════════════════════════════════════════════════════════════════════════════
+ Commnad > state ↵
+═══════════════════════════════════════════════════════════════════════════════
 `
-	configDetail = `
-Commnad > config [--before {duration}] [--range {from=YYYY-mm-ddTHH:MM:SS[,to=YYYY-mm-ddTHH:MM:SS]}]
-                 [--from {pico sec}] [--to {pico sec}] [--agg {result count}] [--least {agg least count}]
+	configDetail = `═══════════════════════════════════════════════════════════════════════════════
+ Commnad > config [--before {duration}] 
+                  [--range {from=YYYY-mm-ddTHH:MM:SS[,to=YYYY-mm-ddTHH:MM:SS]}]
+                  [--from {pico sec}] [--to {pico sec}] 
+				  [--agg {result count}] [--least {agg least count}]
+		          [--sort {parmas.(mid|avg|stdev|sample_stdev) +-*/ ...}]
+		          [--user {client_id}]+ [--percents {quantile}]+ ↵
+═══════════════════════════════════════════════════════════════════════════════
+`
+	queryDetail = `═══════════════════════════════════════════════════════════════════════════════
+ Commnad > query [--before {duration}] 
+                 [--range {from=YYYY-mm-ddTHH:MM:SS[,to=YYYY-mm-ddTHH:MM:SS]}]
+                 [--from {pico sec}] [--to {pico sec}] 
+				 [--agg {result count}] [--least {agg least count}]
 		         [--sort {parmas.(mid|avg|stdev|sample_stdev) +-*/ ...}]
 		         [--user {client_id}]+ [--percents {quantile}]+ ↵
-
+═══════════════════════════════════════════════════════════════════════════════
 `
-	queryDetail = `
-Commnad > query [--before {duration}] [--range {from=YYYY-mm-ddTHH:MM:SS[,to=YYYY-mm-ddTHH:MM:SS]}]
-                [--from {pico sec}] [--to {pico sec}] [--agg {result count}] [--least {agg least count}]
-		        [--sort {parmas.(mid|avg|stdev|sample_stdev) +-*/ ...}]
-		        [--user {client_id}]+ [--percents {quantile}]+ ↵
-
+	pluginDetail = `═══════════════════════════════════════════════════════════════════════════════
+ Commnad > plugin --name {plugin_name} --config {plugin_name}={config_file} ↵
+═══════════════════════════════════════════════════════════════════════════════
 `
-	pluginDetail = `
-Commnad > plugin --name {plugin_name} --config {plugin_name}={config_file} ↵
-
+	unpluginDetail = `═══════════════════════════════════════════════════════════════════════════════
+ Commnad > unplugin --name {plugin_name}	↵
+═══════════════════════════════════════════════════════════════════════════════
 `
-	unpluginDetail = `
-Commnad > unplugin --name {plugin_name}	↵
-
+	showDetail = `═══════════════════════════════════════════════════════════════════════════════
+ Commnad > show {something} ↵
+═══════════════════════════════════════════════════════════════════════════════
 `
-	showDetail = `
-Commnad > show {something} ↵
-
+	topDetail = `═══════════════════════════════════════════════════════════════════════════════
+ Commnad > top {N} ↵
+═══════════════════════════════════════════════════════════════════════════════
 `
-	topDetail = `
-Commnad > top {N} ↵
-
+	exitDetail = `═══════════════════════════════════════════════════════════════════════════════
+ Commnad > exit ↵
+═══════════════════════════════════════════════════════════════════════════════
 `
-	exitDetail = `
-Commnad > exit ↵
-
+	helpDetail = `═══════════════════════════════════════════════════════════════════════════════
+ Command > help [cmd_name]
+═══════════════════════════════════════════════════════════════════════════════
 `
 
 	commandDetails = map[string]string{
@@ -95,7 +103,7 @@ Commnad > exit ↵
 		"plugin":   pluginDetail,
 		"unplugin": unpluginDetail,
 		"show":     showDetail,
-		"help":     commandHelp,
+		"help":     helpDetail,
 		"top":      topDetail,
 		"exit":     exitDetail,
 	}
