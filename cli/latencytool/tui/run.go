@@ -64,7 +64,9 @@ func handleResultState(r *ctl.Result) error {
 func handleResultInfo(r *ctl.Result) error {
 	stateV, ok := r.Values[ctl.VKeyState].(json.RawMessage)
 	if !ok {
-		slog.Warn("no state in info result")
+		if r.CmdName != "start" {
+			slog.Warn("no state in info result")
+		}
 	} else {
 		var state latency4go.State
 		if err := json.Unmarshal(stateV, &state); err != nil {
@@ -184,11 +186,9 @@ func StartTui(
 				return handleResultPeriod(r)
 			case "config":
 				return handleResultConfig(r)
+			case "start":
+				return handleResultInfo(r)
 			default:
-				slog.Warn(
-					"no result handler found, just log it",
-					slog.String("cmd", r.CmdName),
-				)
 				return nil
 			}
 		},

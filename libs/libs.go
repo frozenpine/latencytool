@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"runtime"
 	"strings"
 	"sync"
@@ -158,24 +157,9 @@ func GetRegisteredPlugin(name string) (*PluginContainer, error) {
 }
 
 func GetAndUnRegisterPlugin(name string) (plugin *PluginContainer, err error) {
-	defer func() {
-		if err != nil {
-			return
-		}
+	defer registeredPlugins.Delete(name)
 
-		if plugin.pluginType != GoPlugin {
-			registeredPlugins.Delete(name)
-		} else {
-			slog.Warn(
-				"go plugin can not be unloaded",
-				slog.String("name", name),
-			)
-		}
-	}()
-
-	plugin, err = GetRegisteredPlugin(name)
-
-	return
+	return GetRegisteredPlugin(name)
 }
 
 func RangePlugins(fn func(name string, container *PluginContainer) error) (err error) {

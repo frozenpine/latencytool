@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"reflect"
 	"slices"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -30,6 +32,11 @@ type CtlServer struct {
 	stopOnce  sync.Once
 	handlers  []Handler
 	broadcast channel.MemoChannel[*Message]
+
+	queryCfg      *latency4go.QueryConfig
+	queryInterval time.Duration
+	queryAddr     string
+	querySink     string
 }
 
 func NewCtlServer(
@@ -90,6 +97,36 @@ func (svr *CtlServer) GetLatestState() *latency4go.State {
 	return svr.instance.Load().GetLastState()
 }
 
+func (svr *CtlServer) connectReporter() error {
+	return svr.instance.Load().AddReporter(
+		"controller",
+		func(state *latency4go.State) error {
+			data, err := json.Marshal(state)
+
+			if err != nil {
+				slog.Error(
+					"ctl reporter marshal state failed",
+					slog.Any("error", err),
+				)
+			} else {
+				if err = svr.broadcast.Publish(&Message{
+					msgType: MsgBroadCast,
+					data:    data,
+				}, time.Second*5); err != nil {
+					slog.Error("ctl reporter publish priorities timeout")
+				} else {
+					slog.Debug(
+						"broadcasting state to ctl clients",
+						slog.Any("state", state),
+					)
+				}
+			}
+
+			return nil
+		},
+	)
+}
+
 func (svr *CtlServer) Start(
 	instance *atomic.Pointer[latency4go.LatencyClient],
 ) (err error) {
@@ -102,33 +139,7 @@ func (svr *CtlServer) Start(
 	svr.startOnce.Do(func() {
 		svr.instance = instance
 
-		if err = svr.instance.Load().AddReporter(
-			"controller",
-			func(state *latency4go.State) error {
-				data, err := json.Marshal(state)
-
-				if err != nil {
-					slog.Error(
-						"ctl reporter marshal state failed",
-						slog.Any("error", err),
-					)
-				} else {
-					if err = svr.broadcast.Publish(&Message{
-						msgType: MsgBroadCast,
-						data:    data,
-					}, time.Second*5); err != nil {
-						slog.Error("ctl reporter publish priorities timeout")
-					} else {
-						slog.Debug(
-							"broadcasting state to ctl clients",
-							slog.Any("state", state),
-						)
-					}
-				}
-
-				return nil
-			},
-		); err != nil {
+		if err = svr.connectReporter(); err != nil {
 			err = errors.Join(ErrInitCtlServer, err)
 
 			return
@@ -253,6 +264,8 @@ func (svr *CtlServer) runForever() {
 					slog.Any("error", err),
 					slog.Any("msg", msg),
 				)
+			}
+			if result == nil {
 				continue
 			}
 
@@ -279,6 +292,113 @@ func (svr *CtlServer) runForever() {
 				)
 			}
 
+		}
+	}
+}
+
+func (svr *CtlServer) StopLatencyClient() error {
+	client := svr.instance.Load()
+	if client == nil {
+		return errors.New("no latency client")
+	}
+
+	defer svr.instance.Store(nil)
+
+	// store running config for next start
+	svr.queryCfg = client.GetConfig()
+	svr.queryAddr = client.GetAddr()
+	svr.querySink = client.GetSinkPath()
+	svr.queryInterval = client.GetInterval()
+	slog.Info("latency client last running config stored")
+
+	client.Stop()
+
+	return client.Join()
+}
+
+func (svr *CtlServer) StartLatencyClient(kwargs map[string]string) (*latency4go.LatencyClient, error) {
+	client := svr.instance.Load()
+	if client != nil {
+		return nil, errors.New("latency client already started")
+	}
+
+	scheme, ok := kwargs["schema"]
+	if ok {
+		delete(kwargs, "schema")
+	}
+	host, ok := kwargs["host"]
+	if ok {
+		delete(kwargs, "host")
+	}
+	port, ok := kwargs["port"]
+	if ok {
+		delete(kwargs, "port")
+	}
+
+	var portN int
+	if scheme == "" || host == "" || port == "" {
+		if addr, err := url.Parse(svr.queryAddr); err != nil {
+			return nil, err
+		} else if portN, err = strconv.Atoi(addr.Port()); err != nil {
+			return nil, err
+		} else {
+			scheme = addr.Scheme
+			host = addr.Hostname()
+		}
+	}
+
+	sink, ok := kwargs["sink"]
+	if ok {
+		delete(kwargs, "sink")
+	} else {
+		sink = svr.querySink
+	}
+
+	var inter time.Duration
+	interV, ok := kwargs["interval"]
+	if ok {
+		delete(kwargs, "interval")
+
+		var err error
+		if inter, err = time.ParseDuration(interV); err != nil {
+			return nil, err
+		}
+	} else {
+		inter = svr.queryInterval
+	}
+
+	cfg := svr.queryCfg
+	for k, v := range kwargs {
+		if err := cfg.SetConfig(k, v); err != nil {
+			return nil, err
+		}
+	}
+
+	slog.Info(
+		"initiating latency client with config",
+		slog.String("schema", scheme),
+		slog.String("host", host),
+		slog.Int("port", portN),
+		slog.String("sink", sink),
+		slog.Any("query_cfg", cfg),
+	)
+
+	client = &latency4go.LatencyClient{}
+	if err := client.Init(
+		svr.ctx, scheme, host, portN, sink, cfg,
+	); err != nil {
+		return nil, err
+	}
+
+	if err := client.Start(inter); err != nil {
+		return nil, err
+	} else {
+		svr.instance.Store(client)
+		if err := svr.connectReporter(); err != nil {
+			svr.instance.Store(nil)
+			return nil, err
+		} else {
+			return client, nil
 		}
 	}
 }

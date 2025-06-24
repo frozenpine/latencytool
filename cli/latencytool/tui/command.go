@@ -173,6 +173,7 @@ func init() {
 
 		switch commands[0] {
 		case "stop":
+		case "start":
 		case "suspend":
 		case "resume":
 		case "period":

@@ -160,6 +160,14 @@ func (c *LatencyClient) Init(
 	return
 }
 
+func (c *LatencyClient) GetAddr() string {
+	return c.addr
+}
+
+func (c *LatencyClient) GetSinkPath() string {
+	return c.sinkPath
+}
+
 func (c *LatencyClient) GetVersion() (string, error) {
 	if ins := c.client.Load(); ins != nil {
 		return ins.ElasticsearchVersion(c.addr)

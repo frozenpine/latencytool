@@ -65,6 +65,7 @@ func consoleExecute(
 	}
 
 	switch command {
+	case "start":
 	case "stop":
 	case "suspend":
 	case "resume":
