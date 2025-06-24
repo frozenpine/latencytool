@@ -136,7 +136,11 @@ trading systems specified by args.`,
 				return err
 			}
 
-			return ins.Join()
+			if control := controller.Load(); control != nil {
+				return control.Join()
+			} else {
+				return ins.Join()
+			}
 		}
 
 		return errInvalidInstance
