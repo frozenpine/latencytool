@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path"
+	"log/slog"
 	"path/filepath"
 	"plugin"
 	"runtime"
@@ -13,11 +13,12 @@ import (
 )
 
 const (
-	INIT_FUNC_NAME     = "CreateInstance"
-	REPORT_FUNC_NAME   = "ReportFronts"
-	SEATS_FUNC_NAME    = "Seats"
-	PRIORITY_FUNC_NAME = "Priority"
-	JOIN_FUNC_NAME     = "Join"
+	SET_LOGGER_FUNC_NAME = "SetLogger"
+	INIT_FUNC_NAME       = "CreateInstance"
+	REPORT_FUNC_NAME     = "ReportFronts"
+	SEATS_FUNC_NAME      = "Seats"
+	PRIORITY_FUNC_NAME   = "Priority"
+	JOIN_FUNC_NAME       = "Join"
 )
 
 type GoPluginLib struct {
@@ -32,11 +33,18 @@ type GoPluginLib struct {
 	cancel  context.CancelFunc
 	cfgPath string
 
+	loggerFn   func(slog.Level, string, int, int) error
 	initFn     func(context.Context, string) error
 	reportFn   func(...string) error
 	seatsFn    func() []Seat
 	priorityFn func() [][]int
 	joinFn     func() error
+}
+
+func (goLib *GoPluginLib) SetLogger(
+	lvl slog.Level, logFile string, logSize, logKeep int,
+) error {
+	return goLib.loggerFn(lvl, logFile, logSize, logKeep)
 }
 
 func (goLib *GoPluginLib) Init(ctx context.Context, cfgPath string) (err error) {
@@ -52,6 +60,12 @@ func (goLib *GoPluginLib) Init(ctx context.Context, cfgPath string) (err error) 
 		}
 
 		goLib.cfgPath = cfgPath
+
+		slog.Info(
+			"go plugin initialized",
+			slog.String("plugin", goLib.libPath),
+			slog.String("config", goLib.cfgPath),
+		)
 	})
 
 	return
@@ -80,15 +94,13 @@ func (goLib *GoPluginLib) Join() error {
 func NewGoPlugin(dirName, libName string) (container *PluginContainer, err error) {
 	libIdentity := strings.SplitN(libName, ".", 2)
 
-	libDir := path.Join(dirName, libIdentity[0])
-
 	switch runtime.GOOS {
 	case "linux":
 	default:
 		return nil, errors.New("unsupported platform")
 	}
 
-	libPath := filepath.Join(libDir, libIdentity[0]+".plugin")
+	libPath := filepath.Join(dirName, libIdentity[0]+".plugin")
 
 	lib := &GoPluginLib{
 		libPath: libPath,
@@ -98,7 +110,7 @@ func NewGoPlugin(dirName, libName string) (container *PluginContainer, err error
 		if _, loaded := registeredPlugins.LoadOrStore(
 			libName, &PluginContainer{
 				pluginType: GoPlugin,
-				libDir:     libDir,
+				libDir:     dirName,
 				name:       libName,
 				Plugin:     lib,
 			},
@@ -115,10 +127,28 @@ func NewGoPlugin(dirName, libName string) (container *PluginContainer, err error
 			return
 		}
 
+		if logger, failed := lib.plugin.Lookup(
+			SET_LOGGER_FUNC_NAME,
+		); failed != nil {
+			err = errors.Join(errLibFuncNotFound, failed)
+			return
+		} else if loggerFn, ok := logger.(func(
+			slog.Level, string, int, int,
+		) error); !ok {
+			err = fmt.Errorf(
+				"%w: %s not found", errLibFuncNotFound, SET_LOGGER_FUNC_NAME,
+			)
+			return
+		} else {
+			lib.loggerFn = loggerFn
+		}
+
 		if init, failed := lib.plugin.Lookup(INIT_FUNC_NAME); failed != nil {
 			err = errors.Join(errLibFuncNotFound, failed)
 			return
-		} else if initFn, ok := init.(func(context.Context, string) error); !ok {
+		} else if initFn, ok := init.(func(
+			context.Context, string,
+		) error); !ok {
 			err = fmt.Errorf(
 				"%w: %s not found", errLibFuncNotFound, INIT_FUNC_NAME,
 			)

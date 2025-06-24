@@ -123,3 +123,5 @@ go.work.sum
 cli/latencytool/libs
 
 *.log
+*.ini
+*.csv

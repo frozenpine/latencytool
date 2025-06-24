@@ -10,6 +10,7 @@ import (
 
 	"github.com/frozenpine/latency4go"
 	"github.com/frozenpine/latency4go/ctl"
+	"github.com/frozenpine/latency4go/libs"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/spf13/pflag"
@@ -98,6 +99,18 @@ func handleResultInfo(r *ctl.Result) error {
 		}
 
 		SetSummary(handlers)
+	}
+
+	pluginV, ok := r.Values[ctl.VKeyPlugin].(json.RawMessage)
+	if !ok {
+		slog.Warn("no plugins in info result")
+	} else {
+		var plugins = []*libs.PluginContainer{}
+		if err := json.Unmarshal(pluginV, &plugins); err != nil {
+			return err
+		}
+
+		SetPlugins(plugins)
 	}
 
 	return nil

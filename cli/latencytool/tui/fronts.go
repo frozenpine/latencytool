@@ -18,21 +18,25 @@ func (h *hisStates) append(state *latency4go.State) {
 		return
 	}
 
+	historicalTable.Box.GetRect()
 	h.lock.Lock()
-	defer h.lock.Unlock()
-
 	h.history = append(h.history, state)
+
+	h.lock.Unlock()
 }
 
 var (
-	frontView = tview.NewPages()
+	frontView       = tview.NewPages()
+	historicalTable = tview.NewTable()
 
 	history atomic.Pointer[hisStates]
 )
 
 func init() {
 	history.Store(&hisStates{})
-	frontView.SetTitle(
+	frontView.AddPage(
+		" Timed Quantile ", historicalTable, true, true,
+	).SetTitle(
 		" Front Historical ",
 	).SetTitleAlign(
 		tview.AlignCenter,

@@ -7,6 +7,7 @@ package libs
 #include <strings.h>
 #include <dlfcn.h>
 
+const char* SET_LOGGER_FUNC_NAME = "set_logger";
 const char* INIT_FUNC_NAME = "initialize";
 const char* REPORT_FUNC_NAME = "report_fronts";
 const char* SEATS_FUNC_NAME = "seats";
@@ -24,6 +25,7 @@ typedef struct _level {
 	int len;
 } level_t;
 
+typedef int (*set_logger)(int, char*, int, int);
 typedef int (*initialize)(char*);
 typedef int (*report_fronts)(char**, int);
 typedef int (*seats)(seat_t**);
@@ -31,6 +33,7 @@ typedef int (*priority)(level_t**);
 typedef int (*destory)();
 typedef int (*join)();
 
+int help_set_logger(set_logger fn, int lvl, char* log_file, int size, int keep) { return fn(lvl, log_file, size, keep); }
 int help_init(initialize fn, char* cfg_path) { return fn(cfg_path); }
 int help_report_fronts(report_fronts fn, char** ptr, int len) { return fn(ptr, len); }
 int help_destory(destory fn) { return fn(); }
@@ -68,12 +71,28 @@ type CPluginLib struct {
 	cancel  context.CancelFunc
 	cfgPath string
 
+	loggerFn   C.set_logger
 	initFn     C.initialize
 	reportFn   C.report_fronts
 	seatsFn    C.seats
 	priorityFn C.priority
 	destoryFn  C.destory
 	joinFn     C.join
+}
+
+func (cLib *CPluginLib) SetLogger(
+	lvl slog.Level, logFile string, logSize, logKeep int,
+) error {
+	log_file := C.CString(logFile)
+	defer C.free(unsafe.Pointer(log_file))
+
+	if rtn := C.help_set_logger(
+		cLib.loggerFn, C.int(lvl), log_file, C.int(logSize), C.int(logKeep),
+	); rtn != 0 {
+		return ErrSetLoggerFailed
+	}
+
+	return nil
 }
 
 func (cLib *CPluginLib) Init(ctx context.Context, cfgPath string) (err error) {
@@ -93,6 +112,12 @@ func (cLib *CPluginLib) Init(ctx context.Context, cfgPath string) (err error) {
 		}
 
 		cLib.cfgPath = cfgPath
+
+		slog.Info(
+			"c plugin initialized",
+			slog.String("plugin", cLib.libPath),
+			slog.String("config", cLib.cfgPath),
+		)
 	})
 
 	return
@@ -188,10 +213,9 @@ func NewCPlugin(
 
 	switch runtime.GOOS {
 	case "linux":
-		libDir := filepath.Join(dirName, libIdentiy[0])
-		libPath = filepath.Join(libDir, libIdentiy[0]+".so")
+		libPath = filepath.Join(dirName, libIdentiy[0]+".so")
 
-		if err := os.Setenv("LD_LIBRARY_PATH", libDir); err != nil {
+		if err := os.Setenv("LD_LIBRARY_PATH", dirName); err != nil {
 			return nil, err
 		}
 
@@ -201,7 +225,7 @@ func NewCPlugin(
 		)
 	case "windows":
 		libPath = filepath.Join(
-			dirName, libIdentiy[0], libIdentiy[0]+".dll",
+			dirName, libIdentiy[0]+".dll",
 		)
 	default:
 		return nil, errors.New("unsupported platform")
@@ -238,6 +262,19 @@ func NewCPlugin(
 				"%w: %s", errLibOpenFailed, C.GoString(msg),
 			)
 			return
+		}
+
+		if logger := C.dlsym(
+			lib.plugin, C.SET_LOGGER_FUNC_NAME,
+		); logger == nil {
+			msg := C.dlerror()
+
+			err = fmt.Errorf(
+				"%w: %s", errLibFuncNotFound, C.GoString(msg),
+			)
+			return
+		} else {
+			lib.loggerFn = (C.set_logger)(logger)
 		}
 
 		if init := C.dlsym(lib.plugin, C.INIT_FUNC_NAME); init == nil {

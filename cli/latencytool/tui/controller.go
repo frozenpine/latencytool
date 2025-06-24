@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/frozenpine/latency4go/libs"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -37,6 +38,24 @@ func SetSummary(values []string) {
 			}
 			summary.Write([]byte(v))
 		}
+		client.app.Unlock()
+
+		client.app.Draw()
+	}
+}
+
+func SetPlugins(plugins []*libs.PluginContainer) {
+	if client := instance.Load(); client != nil {
+		client.app.Lock()
+		pluginNode.ClearChildren()
+		for _, p := range plugins {
+			pluginNode.AddChild(
+				tview.NewTreeNode(
+					p.String(),
+				),
+			)
+		}
+		pluginNode.Expand()
 		client.app.Unlock()
 
 		client.app.Draw()

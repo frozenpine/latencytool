@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"runtime"
 	"strings"
 	"sync"
@@ -31,6 +32,7 @@ type Seat struct {
 }
 
 type Plugin interface {
+	SetLogger(slog.Level, string, int, int) error
 	Init(context.Context, string) error
 	Stop()
 	Join() error

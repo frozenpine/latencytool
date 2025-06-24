@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"reflect"
@@ -18,6 +19,7 @@ import (
 	"github.com/frozenpine/latency4go/libs"
 	"github.com/pelletier/go-toml/v2"
 	"gitlab.devops.rdrk.com.cn/quant/rem4go/emc"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var (
@@ -39,6 +41,57 @@ func init() {
 }
 
 func main() {}
+
+func SetLogger(lvl slog.Level, logFile string, logSize, logKeep int) error {
+	var (
+		addSource bool
+		logWr     io.Writer
+	)
+
+	if logFile != "" {
+		logWr = &lumberjack.Logger{
+			Filename: logFile,
+			MaxSize:  logSize,
+			MaxAge:   logKeep,
+			Compress: true,
+		}
+
+		logWr = io.MultiWriter(logWr, os.Stderr)
+	} else {
+		logWr = os.Stderr
+	}
+
+	if lvl <= slog.LevelDebug {
+		addSource = true
+	}
+
+	slog.SetDefault(slog.New(slog.NewTextHandler(
+		logWr, &slog.HandlerOptions{
+			AddSource: addSource,
+			Level:     lvl,
+		},
+	)))
+
+	slog.Debug("logger initiated")
+
+	return nil
+}
+
+//export set_logger
+func set_logger(lvl C.int, logFile *C.char, logSize, logKeep C.int) C.int {
+	if err := SetLogger(
+		slog.Level(lvl),
+		C.GoString(logFile),
+		int(logSize), int(logKeep),
+	); err != nil {
+		fmt.Fprintf(
+			os.Stderr, "rem4go plugin set logger failed: %+v", err,
+		)
+		return -1
+	} else {
+		return 0
+	}
+}
 
 func Init(ctx context.Context, cfgPath string) (err error) {
 	initOnce.Do(func() {

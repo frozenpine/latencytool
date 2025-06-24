@@ -7,7 +7,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"os"
 	"reflect"
 	"sync"
 	"unsafe"
@@ -15,6 +17,7 @@ import (
 	"github.com/frozenpine/latency4go"
 	"github.com/frozenpine/latency4go/libs"
 	"gitlab.devops.rdrk.com.cn/quant/yd4go"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var (
@@ -36,6 +39,57 @@ func init() {
 
 func main() {}
 
+func SetLogger(lvl slog.Level, logFile string, logSize, logKeep int) error {
+	var (
+		addSource bool
+		logWr     io.Writer
+	)
+
+	if logFile != "" {
+		logWr = &lumberjack.Logger{
+			Filename: logFile,
+			MaxSize:  logSize,
+			MaxAge:   logKeep,
+			Compress: true,
+		}
+
+		logWr = io.MultiWriter(logWr, os.Stderr)
+	} else {
+		logWr = os.Stderr
+	}
+
+	if lvl <= slog.LevelDebug {
+		addSource = true
+	}
+
+	slog.SetDefault(slog.New(slog.NewTextHandler(
+		logWr, &slog.HandlerOptions{
+			AddSource: addSource,
+			Level:     lvl,
+		},
+	)))
+
+	slog.Debug("yd4go plugin logger initiated")
+
+	return nil
+}
+
+//export set_logger
+func set_logger(lvl C.int, logFile *C.char, logSize, logKeep C.int) C.int {
+	if err := SetLogger(
+		slog.Level(lvl),
+		C.GoString(logFile),
+		int(logSize), int(logKeep),
+	); err != nil {
+		fmt.Fprintf(
+			os.Stderr, "yd4go plugin set logger failed: %+v", err,
+		)
+		return -1
+	} else {
+		return 0
+	}
+}
+
 func Init(ctx context.Context, cfgPath string) (err error) {
 	initOnce.Do(func() {
 		if ctx == nil {
@@ -44,15 +98,24 @@ func Init(ctx context.Context, cfgPath string) (err error) {
 
 		apiCtx, apiCancel = context.WithCancel(ctx)
 
+		slog.Info(
+			"initializing ydapi",
+			slog.String("config", cfgPath),
+		)
 		if !api.Init(apiCtx, cfgPath) {
 			err = fmt.Errorf(
 				"%w: Yd call api Init failed", libs.ErrInitFailed,
 			)
+			return
 		}
 
+		slog.Info("login to yd with config authentications")
 		if !api.Login("", "", "", "") {
 			err = errors.New("request login failed")
+			return
 		}
+
+		slog.Info("yd4go plugin intialized")
 	})
 
 	return
@@ -60,6 +123,7 @@ func Init(ctx context.Context, cfgPath string) (err error) {
 
 //export initialize
 func initialize(cfgPath *C.char) C.int {
+	slog.Debug("yd4go c bridge [initialize] function called")
 	ydCfg := C.GoString(cfgPath)
 
 	if err := Init(context.Background(), ydCfg); err != nil {
@@ -74,6 +138,10 @@ func initialize(cfgPath *C.char) C.int {
 }
 
 func ReportFronts(addrs ...string) error {
+	slog.Info(
+		"reporting addr list to yd",
+		slog.Any("addr_list", addrs),
+	)
 	if err := api.SelectConnections(addrs...); err != nil {
 		return errors.Join(libs.ErrReportFailed, err)
 	}
@@ -83,6 +151,7 @@ func ReportFronts(addrs ...string) error {
 
 //export report_fronts
 func report_fronts(ptr **C.char, len C.int) C.int {
+	slog.Debug("yd4go c bridge [report_fronts] function called")
 	count := int(len)
 
 	addrs := make([]string, 0, count)
@@ -109,6 +178,7 @@ func report_fronts(ptr **C.char, len C.int) C.int {
 
 //export destory
 func destory() C.int {
+	slog.Debug("yd4go c bridge [destory] function called")
 	apiCancel()
 
 	return 0
@@ -122,6 +192,7 @@ func Join() error {
 
 //export join
 func join() C.int {
+	slog.Debug("yd4go c bridge [join] function called")
 	Join()
 
 	return 0
@@ -145,6 +216,7 @@ func Seats() []libs.Seat {
 
 //export seats
 func seats(buff unsafe.Pointer) C.int {
+	slog.Debug("yd4go c bridge [seats] function called")
 	seats := Seats()
 
 	buffSlice := *(*[]*struct {
@@ -165,6 +237,7 @@ func seats(buff unsafe.Pointer) C.int {
 }
 
 func Priority() [][]int {
+	slog.Debug("yd4go c bridge [priority] function called")
 	prio := api.Priority()
 
 	result := [][]int{}

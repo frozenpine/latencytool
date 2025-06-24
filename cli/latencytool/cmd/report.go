@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -68,6 +69,12 @@ trading systems specified by args.`,
 			return errors.New("no plugin specified")
 		}
 
+		logDir := filepath.Dir(logFile)
+		level := slog.LevelInfo
+		if verbose > 0 {
+			level = slog.LevelDebug - slog.Level(verbose-1)
+		}
+
 		for idx, name := range plugins {
 			cfg, exists := configs[name]
 
@@ -81,6 +88,18 @@ trading systems specified by args.`,
 			container, err := libs.NewPlugin(libDir, name)
 			if err != nil {
 				return err
+			}
+
+			if logDir != "" {
+				pluginLog := filepath.Join(
+					logDir, fmt.Sprint(name, ".log"),
+				)
+
+				if err := container.SetLogger(
+					level, pluginLog, logSize, logKeep,
+				); err != nil {
+					return err
+				}
 			}
 
 			slog.Info(
@@ -115,6 +134,10 @@ trading systems specified by args.`,
 			if err := libs.RangePlugins(func(
 				name string, container *libs.PluginContainer,
 			) error {
+				slog.Info(
+					"registering plugin reporter",
+					slog.String("plugin", container.String()),
+				)
 				if err := ins.AddReporter(
 					name, func(s *latency4go.State) error {
 						return container.ReportFronts(s.AddrList...)
