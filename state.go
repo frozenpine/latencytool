@@ -13,7 +13,7 @@ func NewState(ts time.Time, cfg *QueryConfig, latency []*ExFrontLatency) *State 
 	state := State{
 		Timestamp:   ts,
 		LatencyList: make([]*ExFrontLatency, len(latency)),
-		Config:      *cfg,
+		Config:      *cfg.Clone(),
 	}
 	copy(state.LatencyList, latency)
 	state.AddrList = ConvertSlice(

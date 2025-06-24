@@ -40,6 +40,7 @@ type Reporter func(*State) error
 
 type LatencyReport struct {
 	Timestamp time.Time
+	Config    *QueryConfig
 	Latency   []*ExFrontLatency
 }
 
@@ -296,7 +297,13 @@ func (c *LatencyClient) GetLastState() *State {
 	return nil
 }
 
-func (c *LatencyClient) sinkLatency(ts time.Time, latency []*ExFrontLatency) error {
+func (c *LatencyClient) sinkLatency(
+	ts time.Time, cfg *QueryConfig, latency []*ExFrontLatency,
+) (rpt *LatencyReport) {
+	defer func() {
+		rpt = c.lastReport.Load()
+	}()
+
 	if len(latency) <= 0 {
 		slog.Warn("empty latency result, skip sink")
 
@@ -305,6 +312,7 @@ func (c *LatencyClient) sinkLatency(ts time.Time, latency []*ExFrontLatency) err
 
 	report := LatencyReport{
 		Timestamp: ts,
+		Config:    cfg.Clone(),
 		Latency:   latency,
 	}
 
@@ -314,12 +322,20 @@ func (c *LatencyClient) sinkLatency(ts time.Time, latency []*ExFrontLatency) err
 		return nil
 	}
 
-	data, err := json.Marshal(report)
-	if err != nil {
-		return err
+	if data, err := json.Marshal(report); err != nil {
+		slog.Error(
+			"marshal report data failed",
+			slog.Any("error", err),
+		)
+	} else if err = os.WriteFile(c.sinkPath, data, os.ModePerm); err != nil {
+		slog.Error(
+			"sink report to file failed",
+			slog.Any("error", err),
+			slog.String("sink_file", c.sinkPath),
+		)
 	}
 
-	return os.WriteFile(c.sinkPath, data, os.ModePerm)
+	return nil
 }
 
 func (c *LatencyClient) Suspend() bool {
@@ -388,18 +404,24 @@ func (c *LatencyClient) runQuerier(
 						slog.Any("error", err),
 					)
 
-					c.watchRun <- err
-					return
+					// 一次性运行直接退出
+					if *c.qryInterval.Load() <= 0 {
+						c.watchRun <- err
+						return
+					}
+
+					continue
 				}
 
-				if err := c.sinkLatency(ts, latency); err != nil {
-					slog.Error(
-						"sink latency list failed",
-						slog.Any("error", err),
+				var state *State
+
+				if report := c.sinkLatency(ts, &currCfg, latency); report != nil {
+					state = NewState(
+						report.Timestamp, report.Config, report.Latency,
 					)
+				} else {
+					state = NewState(ts, &currCfg, latency)
 				}
-
-				state := NewState(ts, &currCfg, latency)
 
 				select {
 				case c.notify <- state:

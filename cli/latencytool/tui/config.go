@@ -42,7 +42,7 @@ func SetConfig() {
 		).AddItem(
 			"Tick2Order", state.Config.Tick2Order.String(), '*', nil,
 		).AddItem(
-			"Agg", fmt.Sprintf(
+			"Aggregation", fmt.Sprintf(
 				"size: %d, least: %d",
 				state.Config.AggSize, state.Config.AggCount,
 			), '*', nil,

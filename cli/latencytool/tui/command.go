@@ -144,7 +144,7 @@ func init() {
 				if err := flag.Value.Set(value); err != nil {
 					return err
 				} else {
-					kwargs[flag.Name] = value
+					kwargs[flag.Name] = strings.Trim(value, `"'`)
 					return nil
 				}
 			},
