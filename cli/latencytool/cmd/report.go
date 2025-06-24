@@ -4,7 +4,7 @@ Copyright © 2025 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -63,18 +63,13 @@ var reportCmd = &cobra.Command{
 	Long: `Watching exchange's fronts latency, reporting result to 
 trading systems specified by args.`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		rptCtx, rptCancel := context.WithCancel(cmdCtx)
-		defer rptCancel()
-
 		plugins, _ := cmd.Flags().GetStringSlice("plugin")
+		if len(plugins) < 1 {
+			return errors.New("no plugin specified")
+		}
 
 		for idx, name := range plugins {
-			container, err := libs.NewPlugin(libDir, name)
-			if err != nil {
-				return err
-			}
-
-			cfg, exists := configs[container.Name()]
+			cfg, exists := configs[name]
 
 			if !exists {
 				return fmt.Errorf(
@@ -83,13 +78,17 @@ trading systems specified by args.`,
 				)
 			}
 
+			container, err := libs.NewPlugin(libDir, name)
+			if err != nil {
+				return err
+			}
+
 			slog.Info(
 				"initializing plugin",
 				slog.String("name", name),
 			)
 
-			// TODO multi
-			if err := container.Plugin("").Init(rptCtx, cfg); err != nil {
+			if err := container.Init(cmdCtx, cfg); err != nil {
 				return err
 			}
 
@@ -118,8 +117,7 @@ trading systems specified by args.`,
 			) error {
 				if err := ins.AddReporter(
 					name, func(s *latency4go.State) error {
-						// TODO multi
-						return container.Plugin("").ReportFronts(s.AddrList...)
+						return container.ReportFronts(s.AddrList...)
 					},
 				); err != nil {
 					return err
@@ -152,11 +150,9 @@ trading systems specified by args.`,
 				slog.String("plugin", container.String()),
 			)
 
-			// TODO multi
-			container.Plugin("").Stop()
+			container.Stop()
 
-			// TODO multi
-			if err := container.Plugin("").Join(); err != nil {
+			if err := container.Join(); err != nil {
 				slog.Error(
 					"plugin stop failed",
 					slog.Any("error", err),
