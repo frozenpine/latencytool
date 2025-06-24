@@ -88,7 +88,8 @@ trading systems specified by args.`,
 				slog.String("name", name),
 			)
 
-			if err := container.Plugin().Init(rptCtx, cfg); err != nil {
+			// TODO multi
+			if err := container.Plugin("").Init(rptCtx, cfg); err != nil {
 				return err
 			}
 
@@ -117,7 +118,8 @@ trading systems specified by args.`,
 			) error {
 				if err := ins.AddReporter(
 					name, func(s *latency4go.State) error {
-						return container.Plugin().ReportFronts(s.AddrList...)
+						// TODO multi
+						return container.Plugin("").ReportFronts(s.AddrList...)
 					},
 				); err != nil {
 					return err
@@ -150,9 +152,11 @@ trading systems specified by args.`,
 				slog.String("plugin", container.String()),
 			)
 
-			container.Plugin().Stop()
+			// TODO multi
+			container.Plugin("").Stop()
 
-			if err := container.Plugin().Join(); err != nil {
+			// TODO multi
+			if err := container.Plugin("").Join(); err != nil {
 				slog.Error(
 					"plugin stop failed",
 					slog.Any("error", err),
