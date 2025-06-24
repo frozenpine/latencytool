@@ -100,7 +100,7 @@ func init() {
 
 		switch node.GetText() {
 		case "Plugins":
-			// TODO
+			// TODO expand child
 		}
 	}).SetTitle(
 		" Info ",

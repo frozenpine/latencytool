@@ -41,16 +41,11 @@ type Plugin interface {
 }
 
 type PluginContainer struct {
-	pluginType
+	Plugin
 
-	plugin Plugin
-	libDir string
-	name   string
-}
-
-func (c *PluginContainer) Plugin(name string) Plugin {
-	// TODO multi
-	return c.plugin
+	pluginType pluginType
+	libDir     string
+	name       string
 }
 
 func (c *PluginContainer) Name() string {

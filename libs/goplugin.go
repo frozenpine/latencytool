@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"plugin"
 	"runtime"
+	"strings"
 	"sync"
 )
 
@@ -77,7 +78,9 @@ func (goLib *GoPluginLib) Join() error {
 }
 
 func NewGoPlugin(dirName, libName string) (container *PluginContainer, err error) {
-	libDir := path.Join(dirName, libName)
+	libIdentity := strings.SplitN(libName, ".", 2)
+
+	libDir := path.Join(dirName, libIdentity[0])
 
 	switch runtime.GOOS {
 	case "linux":
@@ -85,7 +88,7 @@ func NewGoPlugin(dirName, libName string) (container *PluginContainer, err error
 		return nil, errors.New("unsupported platform")
 	}
 
-	libPath := filepath.Join(libDir, libName+".plugin")
+	libPath := filepath.Join(libDir, libIdentity[0]+".plugin")
 
 	lib := &GoPluginLib{
 		libPath: libPath,
@@ -97,7 +100,7 @@ func NewGoPlugin(dirName, libName string) (container *PluginContainer, err error
 				pluginType: GoPlugin,
 				libDir:     libDir,
 				name:       libName,
-				plugin:     lib,
+				Plugin:     lib,
 			},
 		); loaded {
 			err = fmt.Errorf(

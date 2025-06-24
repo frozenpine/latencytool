@@ -49,6 +49,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
 	"sync"
 	"unsafe"
 
@@ -183,10 +184,12 @@ func NewCPlugin(
 ) (container *PluginContainer, err error) {
 	var libPath string
 
+	libIdentiy := strings.SplitN(libName, ".", 2)
+
 	switch runtime.GOOS {
 	case "linux":
-		libDir := filepath.Join(dirName, libName)
-		libPath = filepath.Join(libDir, libName+".so")
+		libDir := filepath.Join(dirName, libIdentiy[0])
+		libPath = filepath.Join(libDir, libIdentiy[0]+".so")
 
 		if err := os.Setenv("LD_LIBRARY_PATH", libDir); err != nil {
 			return nil, err
@@ -198,7 +201,7 @@ func NewCPlugin(
 		)
 	case "windows":
 		libPath = filepath.Join(
-			dirName, libName, libName+".dll",
+			dirName, libIdentiy[0], libIdentiy[0]+".dll",
 		)
 	default:
 		return nil, errors.New("unsupported platform")
@@ -214,7 +217,7 @@ func NewCPlugin(
 				pluginType: CPlugin,
 				libDir:     dirName,
 				name:       libName,
-				plugin:     lib,
+				Plugin:     lib,
 			},
 		); loaded {
 			err = fmt.Errorf(

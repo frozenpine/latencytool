@@ -29,7 +29,7 @@ var (
 
 func init() {
 	fmt.Printf(
-		"[LIB emc4go] %s, Commit: %s, Build: %s@%s, YdApiVersion: %s",
+		"[LIB yd4go] %s, Commit: %s, Build: %s@%s, YdApiVersion: %s",
 		version, gitVersion, buildTime, goVersion, yd4go.GetApiVersion(),
 	)
 }
