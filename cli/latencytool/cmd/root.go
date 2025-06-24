@@ -201,11 +201,11 @@ and report to trading systems`,
 
 			if useTui {
 				err = tui.StartTui(
-					cmdCtx, client, cmd.Flags(), client.Release,
+					cmdCtx, client, reportCmd.Flags(), client.Release,
 				)
 			} else {
 				err = consoleExecute(
-					cmdCtx, client, cmd.Flags(), client.Release,
+					cmdCtx, client, reportCmd.Flags(), client.Release,
 				)
 			}
 
