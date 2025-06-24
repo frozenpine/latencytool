@@ -182,7 +182,7 @@ func StartTui(
 
 	client.Init(ctx, "ctl client", client.Start)
 
-	client.MessageLoop(
+	if err := client.MessageLoop(
 		"tui loop", nil,
 		handleState,
 		func(r *ctl.Result) error {
@@ -206,10 +206,14 @@ func StartTui(
 			}
 		},
 		func() error {
-			app.Stop()
+			slog.Error("ctl client message loop ended, quit in 5s")
+			<-time.After(time.Second * 5)
+			exitFn()
 			return nil
 		},
-	)
+	); err != nil {
+		return err
+	}
 
 	return nil
 }

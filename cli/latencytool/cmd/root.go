@@ -128,7 +128,7 @@ func consoleExecute(
 		return errors.New("unsupported command")
 	}
 
-	wait := make(chan struct{})
+	cmdWait := make(chan struct{})
 
 	client.MessageLoop(
 		"console loop",
@@ -136,7 +136,7 @@ func consoleExecute(
 		func(r *ctl.Result) error {
 			defer func() {
 				if r.CmdName == command {
-					close(wait)
+					close(cmdWait)
 				}
 			}()
 
@@ -149,7 +149,7 @@ func consoleExecute(
 		return err
 	}
 
-	<-wait
+	<-cmdWait
 
 	return nil
 }

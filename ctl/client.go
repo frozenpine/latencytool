@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 
 	"github.com/frozenpine/latency4go"
 	"github.com/frozenpine/msgqueue/channel"
 	"github.com/frozenpine/msgqueue/core"
+	"github.com/gofrs/uuid"
 )
 
 type CtlClient interface {
@@ -30,6 +32,8 @@ type ctlBaseClient struct {
 	channel.MemoChannel[*Message]
 	name   string
 	cmdSeq atomic.Uint64
+
+	msgLoopSubs sync.Map
 }
 
 func (c *ctlBaseClient) Name() string {
@@ -54,6 +58,23 @@ func (c *ctlBaseClient) GetCmdSeq() uint64 {
 	return c.cmdSeq.Load()
 }
 
+func (c *ctlBaseClient) closeLoop() {
+	c.msgLoopSubs.Range(func(key, value any) bool {
+		if sub, ok := key.(uuid.UUID); !ok {
+			slog.Error(
+				"invalid message loop sub id",
+				slog.Any("key", key),
+			)
+		} else {
+			c.UnSubscribe(sub)
+		}
+
+		return true
+	})
+
+	c.msgLoopSubs.Clear()
+}
+
 func (c *ctlBaseClient) MessageLoop(
 	name string,
 	preRun func() error,
@@ -75,6 +96,8 @@ func (c *ctlBaseClient) MessageLoop(
 		handleResult = LogResult
 	}
 
+	closeWait := make(chan struct{})
+
 	go func() {
 		subId, notify := c.Subscribe(name, core.Quick)
 
@@ -84,8 +107,13 @@ func (c *ctlBaseClient) MessageLoop(
 			slog.String("sub_id", subId.String()),
 		)
 
+		c.msgLoopSubs.Store(subId, struct{}{})
+
 		defer func() {
-			c.UnSubscribe(subId)
+			defer func() {
+				c.UnSubscribe(subId)
+				close(closeWait)
+			}()
 
 			if postRun == nil {
 				return

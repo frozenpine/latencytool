@@ -15,7 +15,7 @@ type CtlTcpClient struct {
 }
 
 func (c *CtlTcpClient) recv() {
-	defer c.conn.Close()
+	defer c.closeLoop()
 
 	rd := bufio.NewScanner(c.conn)
 
@@ -38,6 +38,8 @@ func (c *CtlTcpClient) recv() {
 			)
 		}
 	}
+
+	slog.Info("tcp client conn closed")
 }
 
 func (c *CtlTcpClient) Start() {
@@ -62,7 +64,10 @@ func (c *CtlTcpClient) Command(cmd *Command) error {
 		return err
 	}
 
-	_, err = c.conn.Write(append(data, '\n'))
+	if _, err = c.conn.Write(append(data, '\n')); err != nil {
+		c.closeLoop()
+	}
+
 	return err
 }
 
