@@ -51,17 +51,17 @@ type LatencyClient struct {
 	addr   string
 	client atomic.Pointer[elastic.Client]
 
-	startOnce      sync.Once
-	stopOnce       sync.Once
-	runCtx         context.Context
-	runCancel      context.CancelFunc
-	watchRun       chan error
-	cfg            atomic.Pointer[QueryConfig]
-	qryInterval    atomic.Pointer[time.Duration]
-	intervalChange chan struct{}
-	suspend        atomic.Bool
-	suspendWg      sync.WaitGroup
-	notify         chan *State
+	startOnce   sync.Once
+	stopOnce    sync.Once
+	runCtx      context.Context
+	runCancel   context.CancelFunc
+	watchRun    chan error
+	cfg         atomic.Pointer[QueryConfig]
+	qryInterval atomic.Pointer[time.Duration]
+	reQuery     chan struct{}
+	suspend     atomic.Bool
+	suspendWg   sync.WaitGroup
+	notify      chan *State
 
 	sinkPath   string
 	lastReport atomic.Pointer[LatencyReport]
@@ -121,7 +121,10 @@ func (c *LatencyClient) Init(
 		)
 
 		if sinkPath != "" {
-			var sinkData []byte
+			var (
+				sinkData []byte
+				report   LatencyReport
+			)
 			if sinkData, err = os.ReadFile(sinkPath); err != nil {
 				if !errors.Is(err, os.ErrNotExist) {
 					return
@@ -130,10 +133,15 @@ func (c *LatencyClient) Init(
 				err = nil
 				slog.Warn("sink file not exists, skip recover")
 			} else if err = json.Unmarshal(
-				sinkData, c.lastReport.Load(),
+				sinkData, &report,
 			); err != nil {
-				return
+				slog.Error(
+					"unmarshal sinked report failed",
+					slog.Any("error", err),
+				)
+				err = nil
 			} else {
+				c.lastReport.Store(&report)
 				slog.Info(
 					"stored latency recovered from file",
 					slog.String("sink_path", sinkPath),
@@ -145,7 +153,7 @@ func (c *LatencyClient) Init(
 		c.client.Store(client)
 		c.cfg.Store(config)
 		c.sinkPath = sinkPath
-		c.intervalChange = make(chan struct{})
+		c.reQuery = make(chan struct{})
 	})
 
 	return
@@ -342,7 +350,7 @@ func (c *LatencyClient) ChangeInterval(interv time.Duration) time.Duration {
 	}
 
 	old := *c.qryInterval.Swap(&interv)
-	c.intervalChange <- struct{}{}
+	c.reQuery <- struct{}{}
 	return old
 }
 
@@ -417,10 +425,11 @@ func (c *LatencyClient) runQuerier(
 				case <-c.runCtx.Done():
 					c.cancelRun("current query context done")
 					return
-				case <-c.intervalChange:
+				case <-c.reQuery:
 					slog.Info(
-						"query interval changed",
+						"interval or config changed",
 						slog.Duration("interval", *c.qryInterval.Load()),
+						slog.Any("config", c.cfg.Load()),
 					)
 				case <-time.After(interval):
 				}
@@ -543,6 +552,8 @@ func (c *LatencyClient) SetConfig(data map[string]string) error {
 	}
 
 	c.cfg.Store(&tmpCfg)
+	c.reQuery <- struct{}{}
+
 	return nil
 }
 
