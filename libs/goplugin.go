@@ -97,7 +97,7 @@ func NewGoPlugin(dirName, libName string) (container *PluginContainer, err error
 				pluginType: GoPlugin,
 				libDir:     libDir,
 				name:       libName,
-				plugin:     lib,
+				Plugin:     lib,
 			},
 		); loaded {
 			err = fmt.Errorf(
