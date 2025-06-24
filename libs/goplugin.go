@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
-	"os"
 	"path"
 	"path/filepath"
 	"plugin"
@@ -83,15 +81,6 @@ func NewGoPlugin(dirName, libName string) (container *PluginContainer, err error
 
 	switch runtime.GOOS {
 	case "linux":
-		if err := os.Setenv("LD_LIBRARY_PATH", libDir); err != nil {
-			return nil, err
-		}
-
-		slog.Info(
-			"lib environment setted for linux",
-			slog.String("LD_LIBRARY_PATH", os.Getenv("LD_LIBRARY_PATH")),
-		)
-	case "windows":
 	default:
 		return nil, errors.New("unsupported platform")
 	}

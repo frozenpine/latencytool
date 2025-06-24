@@ -47,6 +47,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"sync"
 	"unsafe"
@@ -154,7 +155,27 @@ func (cLib *CPluginLib) Seats() []Seat {
 }
 
 func (cLib *CPluginLib) Priority() [][]int {
-	return nil
+	buff := make([]*C.level_t, 15)
+
+	count := C.help_priority(
+		cLib.priorityFn, &buff[0],
+	)
+
+	return latency4go.ConvertSlice(
+		buff[:int(count)], func(v *C.level_t) []int {
+			lvl := make([]int, int(v.len))
+
+			sli := *(*[]int)(unsafe.Pointer(&reflect.SliceHeader{
+				Data: uintptr(unsafe.Pointer(v.levels)),
+				Len:  int(v.len),
+				Cap:  int(v.len),
+			}))
+
+			copy(lvl, sli)
+
+			return lvl
+		},
+	)
 }
 
 func NewCPlugin(

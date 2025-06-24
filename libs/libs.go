@@ -48,7 +48,8 @@ type PluginContainer struct {
 	name   string
 }
 
-func (c *PluginContainer) Plugin() Plugin {
+func (c *PluginContainer) Plugin(name string) Plugin {
+	// TODO multi
 	return c.plugin
 }
 

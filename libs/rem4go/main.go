@@ -185,7 +185,7 @@ func Priority() [][]int {
 func priority(buff unsafe.Pointer) C.int {
 	prio := Priority()
 
-	buffSlice := *(*[]struct {
+	buffSlice := *(*[]*struct {
 		levels *C.int
 		len    C.int
 	})(unsafe.Pointer(&reflect.SliceHeader{
@@ -195,7 +195,7 @@ func priority(buff unsafe.Pointer) C.int {
 	}))
 
 	for idx, lvl := range prio {
-		buffSlice[idx] = struct {
+		buffSlice[idx] = &struct {
 			levels *C.int
 			len    C.int
 		}{

@@ -119,14 +119,16 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 			result.Message = fmt.Sprintf(
 				"%+v: create plugin failed", err,
 			)
-		} else if err = container.Plugin().Init(svr.ctx, config); err != nil {
+		} else if err = container.Plugin("").Init(svr.ctx, config); err != nil {
+			// TODO multi
 			result.Rtn = 1
 			result.Message = fmt.Sprintf(
 				"%+v: init plugin failed", err,
 			)
 		} else if err = svr.instance.Load().AddReporter(
 			name, func(s *latency4go.State) error {
-				return container.Plugin().ReportFronts(s.AddrList...)
+				// TODO multi
+				return container.Plugin("").ReportFronts(s.AddrList...)
 			},
 		); err != nil {
 			result.Rtn = 1
@@ -167,8 +169,9 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 			}
 		}
 
-		container.Plugin().Stop()
-		if err = container.Plugin().Join(); err != nil {
+		// TODO multi
+		container.Plugin("").Stop()
+		if err = container.Plugin("").Join(); err != nil {
 			result.Rtn = 1
 			result.Message = fmt.Sprintf(
 				"%+v: plugin stop failed", err,
