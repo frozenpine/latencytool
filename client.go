@@ -420,6 +420,7 @@ func (c *LatencyClient) runQuerier(
 						report.Timestamp, report.Config, report.Latency,
 					)
 				} else {
+					slog.Warn("no valid report stored, use query config")
 					state = NewState(ts, &currCfg, latency)
 				}
 

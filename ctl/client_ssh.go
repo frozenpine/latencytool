@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -41,11 +40,11 @@ func forward(
 		lsnr.Close()
 	}()
 
-	wg := sync.WaitGroup{}
+	readDone := make(chan struct{})
+	writeDone := make(chan struct{})
 
-	wg.Add(2)
 	go func() {
-		defer wg.Done()
+		defer close(readDone)
 
 		if _, err := io.Copy(conn, pipe); err != nil {
 			slog.Error(
@@ -56,7 +55,7 @@ func forward(
 	}()
 
 	go func() {
-		defer wg.Done()
+		defer close(writeDone)
 
 		if _, err := io.Copy(pipe, conn); err != nil {
 			slog.Error(
@@ -66,7 +65,12 @@ func forward(
 		}
 	}()
 
-	wg.Wait()
+	select {
+	case <-readDone:
+	case <-writeDone:
+	}
+
+	slog.Error("forwarding pipeline broken, exit forwarding")
 }
 
 var (
