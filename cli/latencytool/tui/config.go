@@ -1,8 +1,9 @@
 package tui
 
 import (
+	"fmt"
 	"log/slog"
-	"strconv"
+	"strings"
 
 	"github.com/rivo/tview"
 )
@@ -41,13 +42,18 @@ func SetConfig() {
 		).AddItem(
 			"Tick2Order", state.Config.Tick2Order.String(), '*', nil,
 		).AddItem(
-			"AggSize", strconv.Itoa(state.Config.AggSize), '*', nil,
-		).AddItem(
-			"AggLeast", strconv.Itoa(state.Config.AggCount), '*', nil,
+			"Agg", fmt.Sprintf(
+				"size: %d, least: %d",
+				state.Config.AggSize, state.Config.AggCount,
+			), '*', nil,
 		).AddItem(
 			"Quantile", state.Config.Quantile.String(), '*', nil,
 		).AddItem(
 			"Users", state.Config.Users.String(), '*', nil,
+		).AddItem(
+			"SortBy",
+			strings.ReplaceAll(state.Config.SortBy, "params.", ""),
+			'*', nil,
 		)
 
 		client.app.Unlock()

@@ -25,7 +25,7 @@ func (h *hisStates) append(state *latency4go.State) {
 }
 
 var (
-	frontView = tview.NewTable()
+	frontView = tview.NewPages()
 
 	history atomic.Pointer[hisStates]
 )
