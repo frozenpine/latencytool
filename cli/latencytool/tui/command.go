@@ -18,20 +18,32 @@ var (
 	commandHelp = `════════════════════════════════════════════════════
  Available commands:
 ──────────────── Remote Commands ───────────────────
-  suspend: suspend latency tool running
-   resume: resume suspended latency tool
-   period: change latency tool query period
-    state: get latency tool last state
-   config: change latency tool query config
+    start: start latency client
+	 stop: stop latency client
+  suspend: suspend latency client running
+   resume: resume suspended latency client
+   period: change latency client query period
+    state: get latency client last state
+   config: change latency client query config
     query: query latency result with onetime config
    plugin: add latency reporter plugin
- unplugin: remove reporter plugin from latency tool
-     info: get latency tool info
+ unplugin: remove reporter plugin from latency client
+     info: get latency client info
 ──────────────── Local Commands ────────────────────
      help: print this help message
  	  top: change TopK view
  	 exit: exit ctl client running
 ════════════════════════════════════════════════════
+`
+
+	startDetail = `═══════════════════════════════════════════════════════════════════════════════
+ Commnad > start ↵
+═══════════════════════════════════════════════════════════════════════════════
+`
+
+	stopDetail = `═══════════════════════════════════════════════════════════════════════════════
+ Commnad > stop ↵
+═══════════════════════════════════════════════════════════════════════════════
 `
 
 	suspendDetail = `═══════════════════════════════════════════════════════════════════════════════
@@ -94,6 +106,8 @@ var (
 `
 
 	commandDetails = map[string]string{
+		"start":    startDetail,
+		"stop":     stopDetail,
 		"suspend":  suspendDetail,
 		"resume":   resumeDetail,
 		"period":   periodDetail,
@@ -158,6 +172,7 @@ func init() {
 		}
 
 		switch commands[0] {
+		case "stop":
 		case "suspend":
 		case "resume":
 		case "period":

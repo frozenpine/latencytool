@@ -29,7 +29,7 @@ var (
 
 func handleState(state *latency4go.State) error {
 	if state == nil {
-		return nil
+		return errors.New("empty state")
 	}
 
 	history.Load().append(lastState.Swap(state))
@@ -42,6 +42,22 @@ func handleState(state *latency4go.State) error {
 		slog.Any("priority", state.AddrList),
 		slog.String("config", state.Config.String()),
 	)
+	return nil
+}
+
+func handleResultState(r *ctl.Result) error {
+	stateV, ok := r.Values[ctl.VKeyState].(json.RawMessage)
+	if !ok {
+		slog.Warn("no state in info result")
+	} else {
+		var state latency4go.State
+		if err := json.Unmarshal(stateV, &state); err != nil {
+			return err
+		} else if err := handleState(&state); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -86,8 +102,6 @@ func handleResultInfo(r *ctl.Result) error {
 }
 
 func handleResultPeriod(r *ctl.Result) error {
-	ctl.LogResult(r)
-
 	newV, ok := r.Values[ctl.VKeyInterval].(json.RawMessage)
 	if !ok {
 		slog.Warn("no interval in period result")
@@ -104,8 +118,6 @@ func handleResultPeriod(r *ctl.Result) error {
 }
 
 func handleResultConfig(r *ctl.Result) error {
-	ctl.LogResult(r)
-
 	cfgV, ok := r.Values[ctl.VKeyConfig].(json.RawMessage)
 	if !ok {
 		slog.Warn("no config in result")
@@ -159,16 +171,26 @@ func StartTui(
 		"tui loop", nil,
 		handleState,
 		func(r *ctl.Result) error {
+			if ctl.LogResult(r) != nil {
+				return nil
+			}
+
 			switch r.CmdName {
 			case "info":
 				return handleResultInfo(r)
+			case "state":
+				return handleResultState(r)
 			case "period":
 				return handleResultPeriod(r)
 			case "config":
 				return handleResultConfig(r)
+			default:
+				slog.Warn(
+					"no result handler found, just log it",
+					slog.String("cmd", r.CmdName),
+				)
+				return nil
 			}
-
-			return ctl.LogResult(r)
 		},
 		func() error {
 			app.Stop()

@@ -2,6 +2,7 @@ package ctl
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"slices"
 
@@ -62,7 +63,7 @@ func (r *Result) UnmarshalJSON(v []byte) error {
 	return nil
 }
 
-var LogResult = func(result *Result) error {
+var LogResult = func(result *Result) (err error) {
 	values := values{}
 	keys := make([]resultValueKey, 0, len(result.Values))
 
@@ -100,6 +101,7 @@ var LogResult = func(result *Result) error {
 		logger = slog.Info
 	} else {
 		logger = slog.Error
+		err = errors.New(result.Message)
 	}
 
 	logger(
@@ -107,7 +109,7 @@ var LogResult = func(result *Result) error {
 		attrs...,
 	)
 
-	return nil
+	return
 }
 
 var LogState = func(state *latency4go.State) error {

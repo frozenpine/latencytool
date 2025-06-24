@@ -14,31 +14,51 @@ type Command struct {
 	KwArgs map[string]string
 }
 
-func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
+func (cmd *Command) Execute(svr *CtlServer) (result *Result, err error) {
 	slog.Info(
 		"executing command",
 		slog.Any("cmd", cmd),
 	)
 
-	result := Result{
+	result = &Result{
 		CmdName: cmd.Name,
 		Values:  make(values),
 	}
 
+	client := svr.instance.Load()
+	if client == nil {
+		result.Rtn = 1
+		result.Message = "no latency client running"
+		return
+	}
+
 	switch cmd.Name {
 	case "suspend":
-		if svr.instance.Load().Suspend() {
+		if client.Suspend() {
 			result.Message = "suspend success"
 		} else {
 			result.Rtn = 1
 			result.Message = "suspend failed"
 		}
 	case "resume":
-		if svr.instance.Load().Resume() {
+		if client.Resume() {
 			result.Message = "resume success"
 		} else {
 			result.Rtn = 1
 			result.Message = "resume failed"
+		}
+	case "stop":
+		defer svr.instance.Store(nil)
+
+		client.Stop()
+
+		if err := client.Join(); err != nil {
+			result.Rtn = 1
+			result.Message = fmt.Sprintf(
+				"stop latency client failed: %+v", err,
+			)
+		} else {
+			result.Message = "latency client stopped"
 		}
 	case "period":
 		intv, err := time.ParseDuration(cmd.KwArgs["interval"])
@@ -48,7 +68,7 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 			break
 		}
 
-		rtn := svr.instance.Load().ChangeInterval(intv)
+		rtn := client.ChangeInterval(intv)
 		if rtn <= 0 {
 			result.Rtn = 1
 			result.Message = fmt.Sprintf(
@@ -59,14 +79,14 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 		result.Values[VKeyIntervalOrigin] = rtn
 		result.Values[VKeyInterval] = intv
 	case "state":
-		if state := svr.instance.Load().GetLastState(); state != nil {
+		if state := client.GetLastState(); state != nil {
 			result.Values[VKeyState] = state
 		} else {
 			result.Rtn = 1
 			result.Message = "get last state failed"
 		}
 	case "config":
-		if err := svr.instance.Load().SetConfig(cmd.KwArgs); err != nil {
+		if err := client.SetConfig(cmd.KwArgs); err != nil {
 			result.Rtn = 1
 			result.Message = fmt.Sprintf(
 				"%+v: set config failed", err,
@@ -74,10 +94,10 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 			break
 		}
 
-		cfg := svr.instance.Load().GetConfig()
+		cfg := client.GetConfig()
 		result.Values[VKeyConfig] = cfg
 	case "query":
-		state, err := svr.instance.Load().QueryLatency(cmd.KwArgs)
+		state, err := client.QueryLatency(cmd.KwArgs)
 		if err != nil {
 			result.Rtn = 1
 			result.Message = fmt.Sprintf(
@@ -124,7 +144,7 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 			result.Message = fmt.Sprintf(
 				"%+v: init plugin failed", err,
 			)
-		} else if err = svr.instance.Load().AddReporter(
+		} else if err = client.AddReporter(
 			name, func(s *latency4go.State) error {
 				return container.ReportFronts(s.AddrList...)
 			},
@@ -143,7 +163,7 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 			break
 		}
 
-		if err := svr.instance.Load().DelReporter(name); err != nil {
+		if err := client.DelReporter(name); err != nil {
 			result.Rtn = 1
 			result.Message = fmt.Sprintf(
 				"%+v: del reporter from client faield", err,
@@ -175,11 +195,11 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 			)
 		}
 	case "info":
-		if state := svr.instance.Load().GetLastState(); state != nil {
+		if state := client.GetLastState(); state != nil {
 			result.Values[VKeyState] = state
 		}
 
-		interval := svr.instance.Load().GetInterval()
+		interval := client.GetInterval()
 
 		plugins := []*libs.PluginContainer{}
 
@@ -201,5 +221,5 @@ func (cmd *Command) Execute(svr *CtlServer) (*Result, error) {
 		result.Message = "unsupported command"
 	}
 
-	return &result, nil
+	return
 }

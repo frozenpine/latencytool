@@ -100,8 +100,6 @@ func (c *ctlBaseClient) MessageLoop(
 		}()
 
 		for msg := range notify {
-			var state *latency4go.State
-
 			switch msg.GetType() {
 			case MsgResult:
 				result, err := msg.GetResult()
@@ -115,53 +113,23 @@ func (c *ctlBaseClient) MessageLoop(
 				}
 
 				if handleResult != nil {
-					err = handleResult(result)
+					if err = handleResult(result); err != nil {
+						slog.Error(
+							"message loop handle result failed",
+							slog.Any("error", err),
+							slog.String("name", name),
+						)
+					}
 				} else if result.Rtn != 0 {
 					slog.Error(
 						"command execution failed",
 						slog.String("cmd", result.CmdName),
 						slog.String("error_msg", result.Message),
 					)
-					continue
-				}
-
-				if err != nil {
-					slog.Error(
-						"message loop handle result failed",
-						slog.Any("error", err),
-						slog.String("name", name),
-					)
-				}
-
-				switch result.CmdName {
-				case "state":
-					var rtn latency4go.State
-
-					stateV, ok := result.Values["State"].(json.RawMessage)
-					if !ok {
-						slog.Error("no state in result values")
-					} else {
-						if err := json.Unmarshal(stateV, &rtn); err != nil {
-							slog.Error(
-								"unmarshal state failed",
-								slog.Any("error", err),
-							)
-							continue
-						}
-
-						state = &rtn
-					}
-				default:
-					slog.Log(
-						context.Background(), slog.LevelDebug-1,
-						"command result notified",
-						slog.String("name", name),
-						slog.Any("result", result),
-					)
-					continue
 				}
 			case MsgBroadCast:
-				brd, err := msg.GetState()
+				state, err := msg.GetState()
+
 				if err != nil {
 					slog.Error(
 						"get state message failed",
@@ -169,37 +137,27 @@ func (c *ctlBaseClient) MessageLoop(
 					)
 					continue
 				}
-				state = brd
-			default:
-				slog.Warn(
-					"unsupported return msg from ctl server",
-					slog.Any("result", msg),
-				)
-				continue
-			}
-
-			if state != nil {
-				slog.Log(
-					context.Background(), slog.LevelDebug-1,
-					"latency state notified",
-					slog.String("name", name),
-					slog.Time("timestamp", state.Timestamp),
-					slog.Any("config", state.Config),
-				)
 
 				if handleState == nil {
-					continue
-				}
-
-				if err := handleState(state); err != nil {
+					slog.Log(
+						context.Background(), slog.LevelDebug-1,
+						"latency state notified",
+						slog.String("name", name),
+						slog.Time("timestamp", state.Timestamp),
+						slog.Any("config", state.Config),
+					)
+				} else if err := handleState(state); err != nil {
 					slog.Error(
 						"message loop handle state failed",
 						slog.Any("error", err),
 						slog.String("name", name),
 					)
 				}
-			} else {
-				slog.Error("state is empty")
+			default:
+				slog.Warn(
+					"unsupported return msg from ctl server",
+					slog.Any("result", msg),
+				)
 			}
 		}
 
