@@ -125,3 +125,4 @@ cli/latencytool/libs
 *.log
 *.ini
 *.csv
+*.toml
