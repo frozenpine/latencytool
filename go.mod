@@ -5,6 +5,7 @@ go 1.24.3
 require (
 	github.com/frozenpine/msgqueue v0.0.3
 	github.com/gdamore/tcell/v2 v2.7.1
+	github.com/gofrs/uuid v4.3.1+incompatible
 	github.com/james-barrow/golang-ipc v1.2.4
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/pelletier/go-toml/v2 v2.2.4
@@ -23,7 +24,6 @@ require (
 	github.com/frozenpine/pool v0.0.14 // indirect
 	github.com/gdamore/encoding v1.0.0 // indirect
 	github.com/gocarina/gocsv v0.0.0-20240520201108-78e41c74b4b1 // indirect
-	github.com/gofrs/uuid v4.3.1+incompatible // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect

@@ -12,6 +12,7 @@ import (
 	"os"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/frozenpine/latency4go"
@@ -23,7 +24,7 @@ import (
 var (
 	version, goVersion, gitVersion, buildTime string
 
-	api       = yd4go.YdApi{}
+	api       atomic.Pointer[yd4go.YdApi]
 	apiCtx    context.Context
 	apiCancel context.CancelFunc
 	initOnce  = sync.Once{}
@@ -96,13 +97,20 @@ func Init(ctx context.Context, cfgPath string) (err error) {
 			ctx = context.Background()
 		}
 
+		if !api.CompareAndSwap(nil, &yd4go.YdApi{}) {
+			err = fmt.Errorf(
+				"%w: Yd api already exists: %+v", api.Load(),
+			)
+			return
+		}
+
 		apiCtx, apiCancel = context.WithCancel(ctx)
 
 		slog.Info(
 			"initializing ydapi",
 			slog.String("config", cfgPath),
 		)
-		if !api.Init(apiCtx, cfgPath) {
+		if !api.Load().Init(apiCtx, cfgPath) {
 			err = fmt.Errorf(
 				"%w: Yd call api Init failed", libs.ErrInitFailed,
 			)
@@ -110,7 +118,7 @@ func Init(ctx context.Context, cfgPath string) (err error) {
 		}
 
 		slog.Info("login to yd with config authentications")
-		if !api.Login("", "", "", "") {
+		if !api.Load().Login("", "", "", "") {
 			err = errors.New("request login failed")
 			return
 		}
@@ -142,7 +150,7 @@ func ReportFronts(addrs ...string) error {
 		"reporting addr list to yd",
 		slog.Any("addr_list", addrs),
 	)
-	if err := api.SelectConnections(addrs...); err != nil {
+	if err := api.Load().SelectConnections(addrs...); err != nil {
 		return errors.Join(libs.ErrReportFailed, err)
 	}
 
@@ -185,7 +193,7 @@ func destory() C.int {
 }
 
 func Join() error {
-	<-api.Join()
+	<-api.Load().Join()
 
 	return nil
 }
@@ -199,7 +207,7 @@ func join() C.int {
 }
 
 func Seats() []libs.Seat {
-	seats := api.Seats()
+	seats := api.Load().Seats()
 
 	return latency4go.ConvertSlice(
 		seats, func(v struct {
@@ -238,7 +246,7 @@ func seats(buff unsafe.Pointer) C.int {
 
 func Priority() [][]int {
 	slog.Debug("yd4go c bridge [priority] function called")
-	prio := api.Priority()
+	prio := api.Load().Priority()
 
 	result := [][]int{}
 
