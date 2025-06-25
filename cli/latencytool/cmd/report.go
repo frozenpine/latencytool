@@ -75,7 +75,7 @@ trading systems specified by args.`,
 			level = slog.LevelDebug - slog.Level(verbose-1)
 		}
 
-		for idx, name := range plugins {
+		for _, name := range plugins {
 			cfg, exists := configs[name]
 
 			if !exists {
@@ -110,9 +110,6 @@ trading systems specified by args.`,
 			if err := container.Init(cmdCtx, cfg); err != nil {
 				return err
 			}
-
-			// 修正plugin实际名称
-			plugins[idx] = container.Name()
 		}
 
 		return nil

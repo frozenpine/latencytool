@@ -78,6 +78,7 @@ typedef struct { void *data; GoInt len; GoInt cap; } GoSlice;
 extern "C" {
 #endif
 
+extern int set_logger(int lvl, char* logFile, int logSize, int logKeep);
 extern int initialize(char* cfgPath);
 extern int report_fronts(char** ptr, int len);
 extern int seats(void* buff);

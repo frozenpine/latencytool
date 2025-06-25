@@ -14,10 +14,11 @@ import (
 
 const (
 	SET_LOGGER_FUNC_NAME = "SetLogger"
-	INIT_FUNC_NAME       = "CreateInstance"
+	INIT_FUNC_NAME       = "Init"
 	REPORT_FUNC_NAME     = "ReportFronts"
 	SEATS_FUNC_NAME      = "Seats"
 	PRIORITY_FUNC_NAME   = "Priority"
+	DESTORY_FUNC_NAME    = "Release"
 	JOIN_FUNC_NAME       = "Join"
 )
 
@@ -39,6 +40,7 @@ type GoPluginLib struct {
 	seatsFn    func() []Seat
 	priorityFn func() [][]int
 	joinFn     func() error
+	releaseFn  func()
 }
 
 func (goLib *GoPluginLib) SetLogger(
@@ -84,6 +86,7 @@ func (goLib *GoPluginLib) Priority() [][]int {
 }
 
 func (goLib *GoPluginLib) Stop() {
+	goLib.releaseFn()
 	goLib.cancel()
 }
 
@@ -203,6 +206,18 @@ func NewGoPlugin(dirName, libName string) (container *PluginContainer, err error
 			return
 		} else {
 			lib.priorityFn = priFn
+		}
+
+		if stop, failed := lib.plugin.Lookup(DESTORY_FUNC_NAME); failed != nil {
+			err = errors.Join(errLibFuncNotFound, failed)
+			return
+		} else if stopFn, ok := stop.(func()); !ok {
+			err = fmt.Errorf(
+				"%w: %s not found", errLibFuncNotFound, DESTORY_FUNC_NAME,
+			)
+			return
+		} else {
+			lib.releaseFn = stopFn
 		}
 
 		runtime.SetFinalizer(lib, func(plugin *GoPluginLib) {

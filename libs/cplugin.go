@@ -136,10 +136,15 @@ func (cLib *CPluginLib) Join() error {
 	if rtn := C.help_join(cLib.joinFn); rtn != 0 {
 		return ErrJoinFailed
 	}
+
 	return nil
 }
 
 func (cLib *CPluginLib) ReportFronts(addrList ...string) error {
+	if len(addrList) <= 0 {
+		slog.Warn("no addr list specified")
+		return nil
+	}
 	arr := make([]*C.char, 0, len(addrList))
 
 	for _, addr := range addrList {

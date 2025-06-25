@@ -99,7 +99,8 @@ func Init(ctx context.Context, cfgPath string) (err error) {
 
 		if !api.CompareAndSwap(nil, &yd4go.YdApi{}) {
 			err = fmt.Errorf(
-				"%w: Yd api already exists: %+v", api.Load(),
+				"%w: Yd api already exists: %+v",
+				libs.ErrInitFailed, api.Load(),
 			)
 			return
 		}
@@ -187,7 +188,11 @@ func report_fronts(ptr **C.char, len C.int) C.int {
 //export destory
 func destory() C.int {
 	slog.Debug("yd4go c bridge [destory] function called")
+
+	api.Load().Release()
+
 	apiCancel()
+	api.Store(nil)
 
 	return 0
 }

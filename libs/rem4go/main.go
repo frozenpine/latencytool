@@ -294,6 +294,7 @@ func priority(buff unsafe.Pointer) C.int {
 func destory() C.int {
 	slog.Debug("rem4go c bridge [seats] function called")
 
+	api.Load().Release()
 	apiCancel()
 
 	return 0
@@ -310,6 +311,7 @@ func join() C.int {
 	slog.Debug("rem4go c bridge [join] function called")
 
 	Join()
+	api.Store(nil)
 
 	return 0
 }

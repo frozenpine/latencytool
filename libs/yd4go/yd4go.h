@@ -78,13 +78,13 @@ typedef struct { void *data; GoInt len; GoInt cap; } GoSlice;
 extern "C" {
 #endif
 
-extern __declspec(dllexport) int set_logger(int lvl, char* logFile, int logSize, int logKeep);
-extern __declspec(dllexport) int initialize(char* cfgPath);
-extern __declspec(dllexport) int report_fronts(char** ptr, int len);
-extern __declspec(dllexport) int destory();
-extern __declspec(dllexport) int join();
-extern __declspec(dllexport) int seats(void* buff);
-extern __declspec(dllexport) int priority(void* buff);
+extern int set_logger(int lvl, char* logFile, int logSize, int logKeep);
+extern int initialize(char* cfgPath);
+extern int report_fronts(char** ptr, int len);
+extern int destory();
+extern int join();
+extern int seats(void* buff);
+extern int priority(void* buff);
 
 #ifdef __cplusplus
 }
