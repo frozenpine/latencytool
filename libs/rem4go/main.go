@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/frozenpine/latency4go"
@@ -25,8 +26,8 @@ import (
 var (
 	version, goVersion, gitVersion, buildTime string
 
-	api       = emc.EmcApi{}
-	cfg       = emc.Config{}
+	api       atomic.Pointer[emc.EmcApi]
+	apiCfg    atomic.Pointer[emc.Config]
 	apiCtx    context.Context
 	apiCancel context.CancelFunc
 	initOnce  = sync.Once{}
@@ -72,7 +73,7 @@ func SetLogger(lvl slog.Level, logFile string, logSize, logKeep int) error {
 		},
 	)))
 
-	slog.Debug("logger initiated")
+	slog.Debug("rem4go plugin logger initiated")
 
 	return nil
 }
@@ -99,6 +100,10 @@ func Init(ctx context.Context, cfgPath string) (err error) {
 			ctx = context.Background()
 		}
 
+		slog.Info(
+			"initializing emc api",
+			slog.String("config", cfgPath),
+		)
 		cfgFile, failed := os.OpenFile(cfgPath, os.O_RDONLY, os.ModePerm)
 		if failed != nil {
 			err = errors.Join(libs.ErrInitFailed, failed)
@@ -107,6 +112,7 @@ func Init(ctx context.Context, cfgPath string) (err error) {
 
 		decoder := toml.NewDecoder(cfgFile)
 
+		var cfg emc.Config
 		if failed := decoder.Decode(&map[string]any{
 			"emc": &cfg,
 		}); failed != nil {
@@ -114,19 +120,35 @@ func Init(ctx context.Context, cfgPath string) (err error) {
 			return
 		}
 
+		if !apiCfg.CompareAndSwap(nil, &cfg) {
+			err = fmt.Errorf(
+				"%w: emc config already exists: %+v", apiCfg.Load(),
+			)
+			return
+		}
+
+		if !api.CompareAndSwap(nil, &emc.EmcApi{}) {
+			err = fmt.Errorf(
+				"%w: emc api already exists: %+v", api.Load(),
+			)
+			return
+		}
+
 		apiCtx, apiCancel = context.WithCancel(ctx)
 
-		if err = api.Init(apiCtx, &cfg); err != nil {
+		if err = api.Load().Init(apiCtx, &cfg); err != nil {
 			return
 		}
 
-		if err = api.Connect(); err != nil {
+		if err = api.Load().Connect(); err != nil {
 			return
 		}
 
-		if err = api.Login(); err != nil {
+		if err = api.Load().Login(); err != nil {
 			return
 		}
+
+		slog.Info("emc api initialized")
 	})
 
 	return
@@ -134,6 +156,8 @@ func Init(ctx context.Context, cfgPath string) (err error) {
 
 //export initialize
 func initialize(cfgPath *C.char) C.int {
+	slog.Debug("rem4go c bridge [initialize] function called")
+
 	emcCfg := C.GoString(cfgPath)
 
 	if err := Init(context.Background(), emcCfg); err != nil {
@@ -149,9 +173,9 @@ func initialize(cfgPath *C.char) C.int {
 }
 
 func ReportFronts(addrList ...string) error {
-	if req, err := api.MakeSeatsPriority(addrList...); err != nil {
+	if req, err := api.Load().MakeSeatsPriority(addrList...); err != nil {
 		return errors.Join(libs.ErrReportFailed, err)
-	} else if err = api.SendMktSessPriChange(req); err != nil {
+	} else if err = api.Load().SendMktSessPriChange(req); err != nil {
 		return errors.Join(libs.ErrReportFailed, err)
 	}
 
@@ -160,6 +184,8 @@ func ReportFronts(addrList ...string) error {
 
 //export report_fronts
 func report_fronts(ptr **C.char, len C.int) C.int {
+	slog.Debug("rem4go c bridge [report_fronts] function called")
+
 	count := int(len)
 
 	addrs := make([]string, 0, count)
@@ -185,7 +211,7 @@ func report_fronts(ptr **C.char, len C.int) C.int {
 }
 
 func Seats() []libs.Seat {
-	seats := api.Seats()
+	seats := api.Load().Seats()
 
 	return latency4go.ConvertSlice(
 		seats, func(v emc.Seat) libs.Seat {
@@ -199,6 +225,8 @@ func Seats() []libs.Seat {
 
 //export seats
 func seats(buff unsafe.Pointer) C.int {
+	slog.Debug("rem4go c bridge [seats] function called")
+
 	seats := Seats()
 
 	buffSlice := *(*[]*struct {
@@ -219,7 +247,7 @@ func seats(buff unsafe.Pointer) C.int {
 }
 
 func Priority() [][]int {
-	prio := api.Priority()
+	prio := api.Load().Priority()
 
 	results := [][]int{}
 
@@ -236,6 +264,8 @@ func Priority() [][]int {
 
 //export priority
 func priority(buff unsafe.Pointer) C.int {
+	slog.Debug("rem4go c bridge [seats] function called")
+
 	prio := Priority()
 
 	buffSlice := *(*[]*struct {
@@ -262,19 +292,23 @@ func priority(buff unsafe.Pointer) C.int {
 
 //export destory
 func destory() C.int {
+	slog.Debug("rem4go c bridge [seats] function called")
+
 	apiCancel()
 
 	return 0
 }
 
 func Join() error {
-	<-api.Join()
+	<-api.Load().Join()
 
 	return nil
 }
 
 //export join
 func join() C.int {
+	slog.Debug("rem4go c bridge [join] function called")
+
 	Join()
 
 	return 0
